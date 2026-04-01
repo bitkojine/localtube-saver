@@ -5,6 +5,10 @@
   "author": "LocalTube Team",
   "main": "main.js",
   "description": "LocalTube Saver desktop app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitkojine/localtube-saver.git"
+  },
   "scripts": {
     "start": "electron .",
     "build": "electron-builder"
@@ -19,7 +23,8 @@
       {
         "provider": "github",
         "owner": "bitkojine",
-        "repo": "localtube-saver"
+        "repo": "localtube-saver",
+        "releaseType": "release"
       }
     ],
     "win": {
