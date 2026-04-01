@@ -11,7 +11,8 @@
   },
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "test:e2e": "node e2e_full_workflow.js && node e2e_download.js"
   },
   "build": {
     "appId": "com.localtube.saver",
