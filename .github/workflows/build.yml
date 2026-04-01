@@ -39,9 +39,10 @@ jobs:
         working-directory: apps/desktop
 
       - name: Build Electron app
-        run: pnpm run build -- --publish always
+        run: pnpm run build -- --publish always -c.publish.provider=github
         working-directory: apps/desktop
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          DEBUG: electron-builder
