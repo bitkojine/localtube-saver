@@ -1,34 +1,23 @@
 # LocalTube
 
-Desktop app to download YouTube videos, transcode to iPhone-compatible MP4 (H.264 + AAC), and share via a temporary local URL/QR code.
+Desktop app to download YouTube videos, transcode to MP4, and share to iPhone via QR code.
 
 ## Structure
 
 - `Contract.md` — source of truth for behavior.
-- `apps/desktop` — Electron app (Node.js) with `yt-dlp` + `ffmpeg` pipeline.
+- `apps/desktop` — Electron app with `yt-dlp` + `ffmpeg` pipeline.
 
 ## Requirements
 
 - Node.js 20+
-- `yt-dlp` nightly builds (automatically managed by the app)
-- `ffmpeg` / `ffprobe` (bundled via `ffmpeg-static` / `ffprobe-static`)
 
 ## YouTube Download Bypass
 
-To ensure reliable downloads and bypass YouTube's bot detection, this project implements several key strategies:
-
-- **Nightly Builds:** The app automatically updates `yt-dlp` to the latest nightly version.
-- **JavaScript Runtime:** Uses `node` as a JS runtime (`--js-runtimes node`) to solve YouTube's signature challenges.
-- **Client Spoofing:** Uses the `ios` player client for better extraction success.
-- **PO Token (Proof of Origin):** Includes a `po_token` in extractor arguments.
-- **Cookies:** Optionally pulls cookies from the user's local browser (default: Chrome) via `--cookies-from-browser chrome`.
-
-## Logging
-
-Logs are stored in:
-- `apps/desktop/logs/` (named by date, e.g., `2026-04-01.log`)
-
-Logs include `DEBUG`, `INFO`, `WARN`, and `ERROR` levels with timestamps and stack traces for failures. Old logs (older than 7 days) are automatically cleaned up.
+To bypass YouTube's detection, this project:
+- Uses `yt-dlp` nightly builds (auto-managed).
+- Uses `node` JS runtime for signature challenges.
+- Spoofs `ios` player client.
+- Uses `po_token` and local browser cookies (`chrome`).
 
 ## Run
 
@@ -38,19 +27,12 @@ npm install
 npm run start
 ```
 
-## E2E Testing
+## Logs
 
-A standalone E2E test is available to verify the download pipeline:
-
-```bash
-cd apps/desktop
-node e2e_download.js
-```
+Stored in `apps/desktop/logs/`. Auto-cleaned after 7 days.
 
 ## Notes
 
-- **Output directory:**
-  - macOS: `~/Movies/LocalTube`
-  - Windows: `%USERPROFILE%\Videos\LocalTube`
-- **Transfer link:** Expires after 10 minutes.
-- **Caching:** Completed videos are cached in `.cache.json` within the output directory to avoid redundant downloads.
+- **Output:** `~/Movies/LocalTube` (macOS) or `%USERPROFILE%\Videos\LocalTube` (Windows).
+- **Transfer:** Link expires after 10 minutes.
+- **Caching:** Uses `.cache.json` in output directory to skip redownloads.
