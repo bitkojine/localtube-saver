@@ -32,13 +32,14 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
+          cache-dependency-path: 'apps/desktop/pnpm-lock.yaml'
 
       - name: Install dependencies
         run: pnpm install
         working-directory: apps/desktop
 
       - name: Build Electron app
-        run: pnpm run build
+        run: pnpm run build -- --publish always
         working-directory: apps/desktop
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

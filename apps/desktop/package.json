@@ -23,10 +23,12 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "LocalTube-Saver-Setup-${version}.${ext}"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "artifactName": "LocalTube-Saver-${version}.${ext}"
     }
   },
   "dependencies": {
