@@ -24,7 +24,7 @@
         "provider": "github",
         "owner": "bitkojine",
         "repo": "localtube-saver",
-        "releaseType": "release",
+        "releaseType": "draft",
         "vPrefixedTagName": true
       }
     ],
