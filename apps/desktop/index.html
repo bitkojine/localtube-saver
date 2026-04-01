@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="lt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocalTube</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>LocalTube</h1>
+        <p>Vaizdo įrašai jūsų įrenginyje</p>
+      </header>
+
+      <section class="input">
+        <input id="urlInput" type="text" placeholder="Įklijuokite nuorodą" />
+        <button id="downloadBtn">Atsisiųsti</button>
+      </section>
+
+      <section id="list" class="list"></section>
+    </div>
+
+    <template id="itemTemplate">
+      <div class="item">
+        <div class="item-header">
+          <div class="title"></div>
+          <div class="status"></div>
+        </div>
+        <div class="progress"></div>
+        <div class="actions">
+          <button class="send">Siųsti į iPhone</button>
+          <button class="retry">Bandyti dar kartą</button>
+        </div>
+        <div class="error"></div>
+        <div class="link"></div>
+        <div class="qr"></div>
+      </div>
+    </template>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+.env
+.output.txt
+*.log
+.vscode/
+.idea/
+*.swp
+*.swo
+dist/
+build/
+.vite/
+out/
+logs/
+bin/
