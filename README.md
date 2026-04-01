@@ -6,7 +6,7 @@ Desktop app to download YouTube videos, transcode to MP4, and share to iPhone vi
 
 ### For Users
 
-1. **Download:** Go to the [Releases](https://github.com/your-repo/localtube/releases) page and download the installer for your OS:
+1. **Download:** Go to the [Releases](https://github.com/bitkojine/localtube-saver/releases) page and download the installer for your OS:
    - **Windows:** `LocalTube-Saver-Setup-0.1.0.exe`
    - **macOS:** `LocalTube-Saver-0.1.0.dmg`
 2. **Install:** Run the installer and follow the instructions.
@@ -17,8 +17,8 @@ Desktop app to download YouTube videos, transcode to MP4, and share to iPhone vi
 1. **Requirements:** Node.js 20+
 2. **Clone & Install:**
    ```bash
-   git clone https://github.com/your-repo/localtube.git
-   cd localtube/apps/desktop
+   git clone https://github.com/bitkojine/localtube-saver.git
+   cd localtube-saver/apps/desktop
    pnpm install
    ```
 3. **Run in Dev Mode:**
