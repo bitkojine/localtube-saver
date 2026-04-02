@@ -1,31 +1,54 @@
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const {
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
   DOWNLOAD_FORMAT_PRIMARY,
   DOWNLOAD_FORMAT_FALLBACK,
   DOWNLOAD_RETRIES,
   DOWNLOAD_NO_PROGRESS_TIMEOUT_MS,
   MAX_FILE_SIZE_BYTES,
   TEMP_DIR,
-  COOKIES_FROM_BROWSER
-} = require('./config');
-const logging = require('./logging');
-const { getYtDlpPath, getFfmpegPath } = require('./tools');
+  COOKIES_FROM_BROWSER,
+  YOUTUBE_PO_TOKEN,
+  YOUTUBE_VISITOR_DATA
+} from './config';
+import * as logging from './logging';
+import { getYtDlpPath, getFfmpegPath } from './tools';
 
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-const EXTRACTOR_ARGS = 'youtube:player-client=ios,web;po_token=web+Mn7-9G-A7_Y0W2B9O-k5-q8-7-k-p-1-2-3-4-5-6-7-8-9-0';
 
-function parseJsonLine(line) {
-  try {
-    return JSON.parse(line);
-  } catch (error) {
-    return null;
-  }
+export interface VideoInfo {
+  title: string;
+  sizeBytes: number;
+  audioBitrate: number;
 }
 
-function getVideoInfo(url) {
+export interface DownloadResult {
+  info: VideoInfo;
+  tempPath: string;
+}
+
+function getExtractorArgs(): string {
+  let args = 'youtube:player-client=mweb,web;player-skip=webpage,configs';
+  const tokens: string[] = [];
+  if (YOUTUBE_PO_TOKEN) {
+    tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`mweb.gvs+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`mweb.player+${YOUTUBE_PO_TOKEN}`);
+  }
+  if (tokens.length > 0) {
+    args += `;po_token=${tokens.join(',')}`;
+  }
+  if (YOUTUBE_VISITOR_DATA) {
+    args += `;visitor_data=${YOUTUBE_VISITOR_DATA}`;
+  }
+  return args;
+}
+
+export function getVideoInfo(url: string): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
+    const ytDlpPath = getYtDlpPath();
     const args = [
       '--no-playlist',
       '--dump-json',
@@ -33,54 +56,56 @@ function getVideoInfo(url) {
       '--user-agent',
       USER_AGENT,
       '--extractor-args',
-      EXTRACTOR_ARGS,
+      getExtractorArgs(),
       '--js-runtimes',
-      'node',
-      url
+      'node'
     ];
     if (COOKIES_FROM_BROWSER) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
     }
+    args.push(url);
 
-    const proc = spawn(getYtDlpPath(), args);
-    logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')}`);
+    logging.info(`[Pipeline] Getting video info for: ${url}`);
+    logging.debug(`[Pipeline] Executing: ${ytDlpPath} ${args.join(' ')}`);
+
+    const proc = spawn(ytDlpPath, args);
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    proc.stdout.on('data', (data) => (stdout += data.toString()));
+    proc.stderr.on('data', (data) => (stderr += data.toString()));
 
     proc.on('close', (code) => {
-      logging.debug(`yt-dlp info finished with code ${code}`);
       if (code !== 0) {
-        logging.error(`yt-dlp info error (code ${code}): ${stderr.trim()}`);
-        reject(new Error('INFO_ERROR'));
+        logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, { stderr });
+        reject({ type: 'INFO_ERROR', code, stderr });
         return;
       }
 
-      const line = stdout.trim().split('\n').pop();
-      const info = parseJsonLine(line);
-      if (!info) {
-        reject(new Error('INFO_PARSE_ERROR'));
-        return;
-      }
+      try {
+        const lastLine = stdout.trim().split('\n').pop();
+        if (!lastLine) throw new Error('EMPTY_OUTPUT');
+        const info = JSON.parse(lastLine);
+        
+        const size = Number(info.filesize_approx || info.filesize || 0);
+        const audioBitrate = Number(info.abr || info.tbr || 0);
 
-      const size = Number(info.filesize_approx || info.filesize || 0);
-      const audioBitrate = Number(info.abr || info.tbr || 0);
-      resolve({
-        title: info.title || 'video',
-        sizeBytes: Number.isFinite(size) ? size : 0,
-        audioBitrate
-      });
+        logging.info(`[Pipeline] Video info retrieved: "${info.title}" (${size} bytes)`);
+
+        resolve({
+          title: info.title || 'video',
+          sizeBytes: Number.isFinite(size) ? size : 0,
+          audioBitrate
+        });
+      } catch (err) {
+        logging.error(`[Pipeline] Failed to parse yt-dlp JSON output`, { stdout, stderr });
+        reject({ type: 'INFO_PARSE_ERROR', stderr, stdout });
+      }
     });
   });
 }
 
-function classifyError(stderrText) {
+function classifyError(stderrText: string): string {
   const text = stderrText.toLowerCase();
   if (text.includes('requested format is not available') || text.includes('format not available')) {
     return 'FORMAT_ERROR';
@@ -91,7 +116,7 @@ function classifyError(stderrText) {
   return 'EXTRACTION_ERROR';
 }
 
-function spawnDownload(url, format, tempPath, onProgress) {
+function spawnDownload(url: string, format: string, tempPath: string, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = [
       '--no-playlist',
@@ -106,16 +131,16 @@ function spawnDownload(url, format, tempPath, onProgress) {
       '--user-agent',
       USER_AGENT,
       '--extractor-args',
-      EXTRACTOR_ARGS,
+      getExtractorArgs(),
       '--js-runtimes',
       'node',
       '--ffmpeg-location',
-      getFfmpegPath(),
-      url
+      getFfmpegPath()
     ];
     if (COOKIES_FROM_BROWSER) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
     }
+    args.push(url);
 
     const proc = spawn(getYtDlpPath(), args);
     logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')}`);
@@ -161,7 +186,7 @@ function spawnDownload(url, format, tempPath, onProgress) {
   });
 }
 
-async function downloadVideo(url, onProgress, existingInfo) {
+export async function downloadVideo(url: string, onProgress: (percent: number) => void, existingInfo?: VideoInfo): Promise<DownloadResult> {
   logging.info(`Starting download for URL: ${url}`);
   const info = existingInfo || await getVideoInfo(url);
   if (info.sizeBytes > MAX_FILE_SIZE_BYTES) {
@@ -176,7 +201,7 @@ async function downloadVideo(url, onProgress, existingInfo) {
     try {
       await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress);
       return { info, tempPath };
-    } catch (error) {
+    } catch (error: any) {
       if (error.type === 'FORMAT_ERROR') {
         try {
           await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress);
@@ -199,7 +224,7 @@ async function downloadVideo(url, onProgress, existingInfo) {
   throw new Error('DOWNLOAD_FAILED');
 }
 
-function cleanupTempFiles() {
+export function cleanupTempFiles(): void {
   try {
     const entries = fs.readdirSync(TEMP_DIR);
     for (const entry of entries) {
@@ -216,9 +241,3 @@ function cleanupTempFiles() {
     // ignore
   }
 }
-
-module.exports = {
-  getVideoInfo,
-  downloadVideo,
-  cleanupTempFiles
-};

@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld('localtube', {
   onUpdate: (callback) => ipcRenderer.on('download-update', (_, data) => callback(data)),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', () => callback()),
   onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (_, percent) => callback(percent)),
-  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', () => callback())
+  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', () => callback()),
+  onCrash: (callback) => ipcRenderer.on('app-crash', (_, err) => callback(err))
 });

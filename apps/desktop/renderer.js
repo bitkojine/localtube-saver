@@ -84,6 +84,10 @@ window.localtube.onUpdateDownloaded(() => {
   updateRestartBtn.classList.remove('hidden');
 });
 
+window.localtube.onCrash((err) => {
+  alert(`Programa netikėtai sustojo:\n${err.message}\n\nPerkraukite programą.`);
+});
+
 updateRestartBtn.addEventListener('click', () => {
   window.localtube.restartForUpdate();
 });

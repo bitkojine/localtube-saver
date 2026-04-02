@@ -1,62 +1,104 @@
-# LocalTube
+# 📺 LocalTube Saver
 
-Desktop app to download YouTube videos, transcode to MP4, and share to iPhone via QR code. Works on Windows and macOS.
+[![Release](https://img.shields.io/github/v/release/bitkojine/localtube-saver?include_prereleases&style=flat-square)](https://github.com/bitkojine/localtube-saver/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 
-## Installation
+**LocalTube Saver** is a powerful, production-grade desktop application designed to download YouTube videos, transcode them into iOS-compatible MP4 files, and seamlessly transfer them to your iPhone via a simple QR code. No cables, no cloud uploads, no hassle.
+
+---
+
+## ✨ Key Features
+
+- **🚀 High-Speed Downloads:** Powered by `yt-dlp` with automatic nightly updates and YouTube detection bypass (PO Token support).
+- **🎞️ Native Transcoding:** Built-in `ffmpeg` pipeline ensures every video is perfectly formatted for iOS.
+- **📱 QR Code Transfer:** Instant local network transfer to iPhone—just scan and save to your Photos app.
+- **🖥️ Cross-Platform:** Beautifully crafted for both **macOS** and **Windows**.
+- **🔄 Auto-Updates:** Stay up to date automatically with built-in update checks and notifications.
+- **🛠️ Production Observability:** Detailed pipeline logging and crash reporting for a reliable experience.
+
+---
+
+## 🚀 Getting Started
 
 ### For Users
 
-1. **Download:** Go to the [Releases](https://github.com/bitkojine/localtube-saver/releases) page and download the installer for your OS:
-   - **Windows:** `LocalTube-Saver-Setup-0.1.0.exe`
-   - **macOS:** `LocalTube-Saver-0.1.0.dmg`
-2. **Install:** Run the installer and follow the instructions.
-3. **Launch:** Open "LocalTube Saver" from your Applications folder or Start menu.
+1. **Download:** Head over to the [Releases](https://github.com/bitkojine/localtube-saver/releases) page.
+2. **Install:** 
+   - **Windows:** Download and run `LocalTube-Saver-Setup-X.X.X.exe`.
+   - **macOS:** Download `LocalTube-Saver-X.X.X.dmg`, open it, and drag to Applications.
+3. **Enjoy:** Paste a YouTube link, wait for it to process, and scan the QR code to send it to your iPhone.
 
 ### For Developers
 
-1. **Requirements:** Node.js 20+
-2. **Clone & Install:**
+**Prerequisites:** [Node.js](https://nodejs.org/) 20+ and [pnpm](https://pnpm.io/) installed.
+
+1. **Clone & Install:**
    ```bash
    git clone https://github.com/bitkojine/localtube-saver.git
-   cd localtube-saver/apps/desktop
+   cd localtube-saver
    pnpm install
    ```
-3. **Run in Dev Mode:**
+2. **Development:** Start the app in watch mode (TypeScript build + Electron).
    ```bash
-   pnpm start
+   pnpm -F localtube-desktop start
    ```
-4. **Build Installers:**
+3. **Build Installers:**
    ```bash
    # Build for current OS
-   pnpm run build
+   pnpm -F localtube-desktop build
 
-   # Build for both Windows and macOS (requires macOS for DMG)
-   pnpm run build -- -wm
+   # Build for both Windows and macOS (macOS required for DMG)
+   pnpm -F localtube-desktop build -- -wm
    ```
 
-## Structure
+---
 
-- `Contract.md` — source of truth for behavior.
-- `apps/desktop` — Electron app with `yt-dlp` + `ffmpeg` pipeline.
+## 🏗️ Technical Architecture
 
-## YouTube Download Bypass
+- **Frontend:** HTML5/CSS3 with a vanilla TypeScript renderer for maximum performance.
+- **Main Process:** Electron (TypeScript) managing the download/transcode pipeline.
+- **Core Tools:** 
+  - `yt-dlp`: For robust video extraction.
+  - `ffmpeg`: For high-quality MP4 transcoding.
+  - `Express`: Temporary local server for iPhone transfers.
+- **Workflow:** Automated CI/CD using GitHub Actions for testing and multi-platform releases.
 
-To bypass YouTube's detection, this project:
-- Uses `yt-dlp` nightly builds (auto-managed).
-- Uses `node` JS runtime for signature challenges.
-- Spoofs `ios` player client.
-- Uses `po_token` and local browser cookies (`chrome`).
+---
 
-## Logs
+## 🛡️ YouTube Bypass & Stability
 
-Stored in `apps/desktop/logs/` (dev) or in the app's data directory (production). Auto-cleaned after 7 days.
+This project maintains high reliability by implementing several advanced techniques:
+- **Nightly Tooling:** Automatically manages and updates `yt-dlp` binaries.
+- **PO Token Support:** Configurable `YOUTUBE_PO_TOKEN` and `YOUTUBE_VISITOR_DATA` to handle YouTube's latest security requirements.
+- **Player Spoofing:** Uses the `mweb` and `ios` player clients to ensure stable streams.
+- **Local Caching:** Avoids duplicate downloads by checking for existing files in `~/Movies/LocalTube` (macOS) or `%USERPROFILE%\Videos\LocalTube` (Windows).
 
-## Notes
+---
 
-- **Output:** `~/Movies/LocalTube` (macOS) or `%USERPROFILE%\Videos\LocalTube` (Windows).
-- **Transfer:** Link expires after 10 minutes.
-- **Caching:** Uses `.cache.json` in output directory to skip redownloads.
-- **iOS Transfer:** When you scan the QR code on your iPhone:
-  1. Open the link in Safari.
-  2. Tap the **Share** button.
-  3. Select **Save Video** to add it to your Photos app.
+## 📱 How to Save to iPhone
+
+1. **Scan:** Use your iPhone's camera to scan the QR code displayed in the app.
+2. **Open:** Open the link in **Safari**.
+3. **Share:** Tap the **Share** button at the bottom of the screen.
+4. **Save:** Select **"Save Video"** to add it directly to your Photos app.
+*Note: Your iPhone and computer must be on the same Wi-Fi network.*
+
+---
+
+## 📂 Project Structure
+
+- `apps/desktop/` — Main Electron application source.
+- `apps/desktop/src/` — Core TypeScript logic (Download, Transcode, Transfer).
+- `.github/workflows/` — CI and Release automation.
+- `Contract.md` — Technical specification and source of truth for behavior.
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` (if provided) or the repository for more information.
+
+---
+
+*Built with ❤️ by the LocalTube Team.*

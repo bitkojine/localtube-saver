@@ -1,15 +1,23 @@
-const crypto = require('crypto');
-const path = require('path');
-const express = require('express');
-const fs = require('fs');
-const { TRANSFER_BIND_HOST, TRANSFER_TOKEN_TTL_MS, TRANSFER_NO_DATA_TIMEOUT_MS, MAX_FILE_SIZE_BYTES } = require('./config');
-const { writeLog } = require('./logging');
+import * as crypto from 'crypto';
+import * as path from 'path';
+import express, { Request, Response } from 'express';
+import * as fs from 'fs';
+import { TRANSFER_BIND_HOST, TRANSFER_TOKEN_TTL_MS, TRANSFER_NO_DATA_TIMEOUT_MS, MAX_FILE_SIZE_BYTES } from './config';
+import { info as writeLog } from './logging';
+import { Server } from 'http';
 
-function createToken() {
+export interface TransferInfo {
+  server: Server;
+  token: string;
+  port: number;
+  expiresAt: number;
+}
+
+function createToken(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-async function createTransferServer(filePath) {
+export async function createTransferServer(filePath: string): Promise<TransferInfo> {
   const stats = fs.statSync(filePath);
   if (stats.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('FILE_TOO_LARGE');
@@ -19,8 +27,8 @@ async function createTransferServer(filePath) {
   const token = createToken();
   const expiresAt = Date.now() + TRANSFER_TOKEN_TTL_MS;
 
-  function isAuthorized(req) {
-    const reqToken = req.query.token || req.headers['x-localtube-token'];
+  function isAuthorized(req: Request): boolean {
+    const reqToken = (req.query.token as string) || req.headers['x-localtube-token'];
     if (!reqToken || reqToken !== token) {
       return false;
     }
@@ -30,7 +38,7 @@ async function createTransferServer(filePath) {
     return true;
   }
 
-  app.get('/transfer', (req, res) => {
+  app.get('/transfer', (req: Request, res: Response) => {
     if (!isAuthorized(req)) {
       res.status(403).end();
       return;
@@ -76,9 +84,12 @@ async function createTransferServer(filePath) {
       return;
     }
 
+    const fileName = path.basename(filePath);
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Length', stats.size);
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+    // Use RFC 5987 for non-ASCII filename support
+    const encodedFileName = encodeURIComponent(fileName);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}"; filename*=UTF-8''${encodedFileName}`);
 
     const stream = fs.createReadStream(filePath);
     let lastDataAt = Date.now();
@@ -93,7 +104,7 @@ async function createTransferServer(filePath) {
       lastDataAt = Date.now();
     });
 
-    stream.on('error', (error) => {
+    stream.on('error', (error: Error) => {
       clearInterval(timeout);
       writeLog(`transfer error: ${error.message}`);
       if (!res.headersSent) {
@@ -109,30 +120,28 @@ async function createTransferServer(filePath) {
     stream.pipe(res);
   });
 
-  const server = await new Promise((resolve, reject) => {
+  const server = await new Promise<Server>((resolve, reject) => {
     const listener = app.listen(0, TRANSFER_BIND_HOST, () => resolve(listener));
-    listener.on('error', (err) => {
+    listener.on('error', (err: Error) => {
       writeLog(`server listen error: ${err.message}`);
       reject(err);
     });
   });
 
+  const addr = server.address();
+  const port = (typeof addr === 'string' || !addr) ? 0 : addr.port;
+
   return {
     server,
     token,
-    port: server.address().port,
+    port,
     expiresAt
   };
 }
 
-function closeTransferServer(server) {
+export function closeTransferServer(server: Server | null): void {
   if (!server) {
     return;
   }
   server.close();
 }
-
-module.exports = {
-  createTransferServer,
-  closeTransferServer
-};

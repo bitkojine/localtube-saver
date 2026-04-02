@@ -1,4 +1,4 @@
-module.exports = {
+const strings = {
   buttons: {
     download: 'Atsisiųsti',
     sendToIphone: 'Siųsti į iPhone',
@@ -20,6 +20,14 @@ module.exports = {
   errors: {
     invalidUrl: 'Neteisinga nuoroda',
     downloadFailed: 'Nepavyko atsisiųsti',
-    notEnoughDisk: 'Nepakanka vietos diske'
+    notEnoughDisk: 'Nepakanka vietos diske',
+    fileTooLarge: 'Failas per didelis',
+    infoError: 'Nepavyko gauti informacijos apie įrašą',
+    networkError: 'Tinklo klaida',
+    formatError: 'Nepavyko rasti tinkamo formato',
+    extractionError: 'Vaizdo įrašo gavimo klaida (galbūt amžiaus ribojimas?)',
+    unknownError: 'Nežinoma klaida'
   }
 };
+
+export default strings;

@@ -1,10 +1,14 @@
-const { spawn } = require('child_process');
-const path = require('path');
-const { TRANSCODE_NO_PROGRESS_TIMEOUT_MS } = require('./config');
-const { writeLog } = require('./logging');
-const { getFfmpegPath, getFfprobePath } = require('./tools');
+import { spawn } from 'child_process';
+import { TRANSCODE_NO_PROGRESS_TIMEOUT_MS } from './config';
+import { info as writeLog } from './logging';
+import { getFfmpegPath, getFfprobePath } from './tools';
 
-function runFfprobe(filePath) {
+interface ProbeResult {
+  duration: number;
+  audioBitrate: number;
+}
+
+export function runFfprobe(filePath: string): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
     const args = [
       '-v', 'error',
@@ -34,7 +38,7 @@ function runFfprobe(filePath) {
       try {
         const parsed = JSON.parse(stdout);
         const duration = Number(parsed.format?.duration || 0);
-        const audioStream = (parsed.streams || []).find((s) => s.codec_type === 'audio');
+        const audioStream = (parsed.streams || []).find((s: any) => s.codec_type === 'audio');
         const audioBitrate = Number(audioStream?.bit_rate || 0);
         resolve({ duration, audioBitrate });
       } catch (error) {
@@ -44,7 +48,7 @@ function runFfprobe(filePath) {
   });
 }
 
-function spawnTranscode(inputPath, outputPath, audioBitrate, onProgress) {
+function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: number, onProgress: (time: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const audioArgs = audioBitrate >= 160000
       ? ['-c:a', 'copy']
@@ -98,14 +102,9 @@ function spawnTranscode(inputPath, outputPath, audioBitrate, onProgress) {
   });
 }
 
-async function transcodeToMp4(inputPath, outputPath, onProgress) {
+export async function transcodeToMp4(inputPath: string, outputPath: string, onProgress: (time: number, duration: number) => void): Promise<void> {
   const info = await runFfprobe(inputPath);
   await spawnTranscode(inputPath, outputPath, info.audioBitrate, (time) => {
     onProgress(time, info.duration);
   });
 }
-
-module.exports = {
-  transcodeToMp4,
-  runFfprobe
-};

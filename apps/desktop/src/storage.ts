@@ -1,15 +1,17 @@
-const fs = require('fs');
-const path = require('path');
-const sanitize = require('sanitize-filename');
-const { OUTPUT_DIR, MAX_FILENAME_LENGTH } = require('./config');
+import * as fs from 'fs';
+import * as path from 'path';
+import sanitize from 'sanitize-filename';
+import { OUTPUT_DIR, MAX_FILENAME_LENGTH } from './config';
 
 const CACHE_FILE = path.join(OUTPUT_DIR, '.cache.json');
 
-function ensureOutputDir() {
+type Cache = Record<string, string>;
+
+export function ensureOutputDir(): void {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
-function loadCache() {
+function loadCache(): Cache {
   try {
     if (fs.existsSync(CACHE_FILE)) {
       return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
@@ -20,7 +22,7 @@ function loadCache() {
   return {};
 }
 
-function saveCache(cache) {
+function saveCache(cache: Cache): void {
   try {
     ensureOutputDir();
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
@@ -29,7 +31,7 @@ function saveCache(cache) {
   }
 }
 
-function getCachedPath(videoId) {
+export function getCachedPath(videoId: string): string | null {
   const cache = loadCache();
   const filePath = cache[videoId];
   if (filePath && fs.existsSync(filePath)) {
@@ -38,25 +40,25 @@ function getCachedPath(videoId) {
   return null;
 }
 
-function setCachedPath(videoId, filePath) {
+export function setCachedPath(videoId: string, filePath: string): void {
   const cache = loadCache();
   cache[videoId] = filePath;
   saveCache(cache);
 }
 
-function sanitizeTitle(title) {
+export function sanitizeTitle(title: string): string {
   const sanitized = sanitize(title).replace(/\s+/g, ' ').trim();
   const truncated = sanitized.slice(0, MAX_FILENAME_LENGTH);
   return truncated.length > 0 ? truncated : 'video';
 }
 
-function buildOutputPath(title) {
+export function buildOutputPath(title: string): string {
   ensureOutputDir();
   const base = sanitizeTitle(title);
   return path.join(OUTPUT_DIR, `${base}.mp4`);
 }
 
-function ensureUniquePath(filePath) {
+export function ensureUniquePath(filePath: string): string {
   if (!fs.existsSync(filePath)) {
     return filePath;
   }
@@ -65,15 +67,18 @@ function ensureUniquePath(filePath) {
   const base = path.basename(filePath, ext);
   let counter = 1;
   let candidate = '';
-  do {
+  while (true) {
     candidate = path.join(dir, `${base} (${counter})${ext}`);
+    if (!fs.existsSync(candidate)) {
+      return candidate;
+    }
     counter += 1;
-  } while (fs.existsSync(candidate));
-  return candidate;
+  }
 }
 
-function hasEnoughDiskSpace(targetDir, requiredBytes) {
+export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): boolean {
   try {
+    // Note: statfsSync is available in Node 18.15.0+ and 20.0.0+
     const stats = fs.statfsSync(targetDir);
     const free = stats.bavail * stats.bsize;
     return free >= requiredBytes;
@@ -81,13 +86,3 @@ function hasEnoughDiskSpace(targetDir, requiredBytes) {
     return false;
   }
 }
-
-module.exports = {
-  ensureOutputDir,
-  sanitizeTitle,
-  buildOutputPath,
-  ensureUniquePath,
-  hasEnoughDiskSpace,
-  getCachedPath,
-  setCachedPath
-};

@@ -1,25 +1,61 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const path = require('path');
-const { extractVideoId } = require('./src/validation');
-const { TaskQueue } = require('./src/queue');
-const { getVideoInfo, downloadVideo, cleanupTempFiles } = require('./src/download');
-const { transcodeToMp4 } = require('./src/transcode');
-const { buildOutputPath, ensureUniquePath, hasEnoughDiskSpace, ensureOutputDir, getCachedPath, setCachedPath } = require('./src/storage');
-const { createTransferServer, closeTransferServer } = require('./src/transfer');
-const logging = require('./src/logging');
-const { getLocalIp, throttle } = require('./src/util');
-const { OUTPUT_DIR, PROGRESS_UPDATE_MIN_MS } = require('./src/config');
-const strings = require('./src/strings');
-const QRCode = require('qrcode');
-const fs = require('fs');
-const { setToolDir, ensureTools } = require('./src/tools');
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import * as path from 'path';
+import { extractVideoId } from './src/validation';
+import { TaskQueue } from './src/queue';
+import { getVideoInfo, downloadVideo, cleanupTempFiles, VideoInfo } from './src/download';
+import { transcodeToMp4 } from './src/transcode';
+import { buildOutputPath, ensureUniquePath, hasEnoughDiskSpace, ensureOutputDir, getCachedPath, setCachedPath } from './src/storage';
+import { createTransferServer, closeTransferServer } from './src/transfer';
+import * as logging from './src/logging';
+import { getLocalIp, throttle } from './src/util';
+import { OUTPUT_DIR, PROGRESS_UPDATE_MIN_MS } from './src/config';
+import strings from './src/strings';
+import * as QRCode from 'qrcode';
+import * as fs from 'fs';
+import { setToolDir, ensureTools } from './src/tools';
+import { Server } from 'http';
+
+interface DownloadItem {
+  id: string;
+  url: string;
+  title: string;
+  status: string;
+  progress: number;
+  error: string | null;
+  outputPath: string | null;
+  tempPath?: string;
+  transfer: {
+    url: string;
+    token: string;
+    qr: string;
+    expiresAt: number;
+    server: Server;
+  } | null;
+  transferTimer: NodeJS.Timeout | null;
+}
+
+// Global crash handlers
+process.on('uncaughtException', (err) => {
+  logging.error('Uncaught Exception', err);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app-crash', {
+      message: err.message,
+      stack: err.stack
+    });
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logging.error('Unhandled Rejection at:', promise);
+  logging.error('Reason:', reason);
+});
 
 const queue = new TaskQueue();
-const downloads = new Map();
-let mainWindow;
+const downloads = new Map<string, DownloadItem>();
+let mainWindow: BrowserWindow | null = null;
 
-function sendUpdate(id) {
+function sendUpdate(id: string): void {
   if (!mainWindow) return;
   const item = downloads.get(id);
   if (!item) return;
@@ -43,7 +79,7 @@ function sendUpdate(id) {
   mainWindow.webContents.send('download-update', updateData);
 }
 
-function runPipeline(item) {
+function runPipeline(item: DownloadItem): void {
   queue.add(async () => {
     const videoId = extractVideoId(item.url);
     if (videoId) {
@@ -59,7 +95,7 @@ function runPipeline(item) {
       }
     }
 
-    const updateProgress = throttle((progress) => {
+    const updateProgress = throttle((progress: number) => {
       item.progress = progress;
       sendUpdate(item.id);
     }, PROGRESS_UPDATE_MIN_MS);
@@ -70,21 +106,25 @@ function runPipeline(item) {
       item.title = info.title;
       sendUpdate(item.id);
 
+      logging.info(`[Pipeline] Checking disk space for ${info.sizeBytes} bytes`);
       ensureOutputDir();
       const required = info.sizeBytes > 0 ? info.sizeBytes * 2 : 0;
       if (!hasEnoughDiskSpace(OUTPUT_DIR, required)) {
+        logging.error(`[Pipeline] Not enough disk space: ${required} required`);
         item.error = strings.errors.notEnoughDisk;
         item.status = strings.status.ready;
         sendUpdate(item.id);
         return;
       }
 
+      logging.info('[Pipeline] Starting download');
       const downloadResult = await downloadVideo(item.url, (percent) => {
         item.status = strings.status.downloading;
         updateProgress(Math.round(percent));
       }, info);
 
       item.tempPath = downloadResult.tempPath;
+      logging.info(`[Pipeline] Downloaded to ${item.tempPath}. Starting transcoding.`);
       item.status = strings.status.transcoding;
       item.progress = 0;
       sendUpdate(item.id);
@@ -95,10 +135,11 @@ function runPipeline(item) {
         updateProgress(percent);
       });
 
+      logging.info(`[Pipeline] Transcoding finished: ${outputPath}`);
       try {
-        fs.unlinkSync(item.tempPath);
+        if (item.tempPath) fs.unlinkSync(item.tempPath);
       } catch (error) {
-        // ignore
+        logging.warn(`[Pipeline] Failed to delete temp file: ${item.tempPath}`);
       }
 
       item.outputPath = outputPath;
@@ -109,36 +150,70 @@ function runPipeline(item) {
       item.progress = 100;
       item.error = null;
       sendUpdate(item.id);
-    } catch (error) {
-      logging.error(`download pipeline error: ${error.message}`, error);
-      item.error = strings.errors.downloadFailed;
+    } catch (error: any) {
+      logging.error('[Pipeline] Global failure', error);
+      
+      let errorMsg = strings.errors.downloadFailed;
+      const errorType = error.type || error.message || 'UNKNOWN';
+
+      if (errorType === 'INFO_ERROR' || errorType === 'INFO_PARSE_ERROR') {
+        errorMsg = strings.errors.infoError;
+      } else if (errorType === 'FILE_TOO_LARGE') {
+        errorMsg = strings.errors.fileTooLarge;
+      } else if (errorType === 'NETWORK_ERROR') {
+        errorMsg = strings.errors.networkError;
+      } else if (errorType === 'FORMAT_ERROR') {
+        errorMsg = strings.errors.formatError;
+      } else if (errorType === 'EXTRACTION_ERROR') {
+        errorMsg = strings.errors.extractionError;
+      }
+      
+      if (error.stderr) {
+        logging.error(`[Pipeline] Captured stderr: ${error.stderr}`);
+        if (error.stderr.includes('Sign in to confirm you’re not a bot')) {
+          errorMsg = 'YouTube prašo patvirtinti, kad nesate robotas.';
+        } else if (error.stderr.includes('This video is age-restricted')) {
+          errorMsg = 'Vaizdo įrašas turi amžiaus ribojimą.';
+        } else if (error.stderr.includes('Video unavailable')) {
+          errorMsg = 'Vaizdo įrašas nepasiekiamas.';
+        } else if (error.stderr.includes('GVS PO Token')) {
+          errorMsg = 'YouTube reikalauja papildomo patvirtinimo (PO Token). Bandykite vėliau arba atnaujinkite nustatymus.';
+        }
+      }
+
+      item.error = errorMsg;
       item.status = strings.status.ready;
       sendUpdate(item.id);
     }
   });
 }
 
-function createWindow() {
+function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, '..', 'preload.js')
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
 }
 
 app.whenReady().then(() => {
   setToolDir(path.join(app.getPath('userData'), 'bin'));
   ensureTools()
-    .catch((error) => {
+    .catch((error: Error) => {
       logging.error(`tool setup failed: ${error.message}`, error);
     });
 
   cleanupTempFiles();
   logging.cleanupOldLogs();
+  
+  logging.info('App starting...');
+  logging.info(`Platform: ${process.platform}, Arch: ${process.arch}`);
+  logging.info(`UserData path: ${app.getPath('userData')}`);
+
   createWindow();
 
   autoUpdater.checkForUpdatesAndNotify();
@@ -172,14 +247,14 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('download-start', async (event, url) => {
+ipcMain.handle('download-start', async (event, url: string) => {
   const id = `dl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   if (!extractVideoId(url)) {
     return { id, error: strings.errors.invalidUrl };
   }
 
-  const item = {
+  const item: DownloadItem = {
     id,
     url,
     title: '',
@@ -198,7 +273,7 @@ ipcMain.handle('download-start', async (event, url) => {
   return { id };
 });
 
-ipcMain.handle('download-retry', async (event, id) => {
+ipcMain.handle('download-retry', async (event, id: string) => {
   const item = downloads.get(id);
   if (!item) return;
   item.error = null;
@@ -209,7 +284,7 @@ ipcMain.handle('download-retry', async (event, id) => {
   return { id };
 });
 
-ipcMain.handle('transfer-start', async (event, id) => {
+ipcMain.handle('transfer-start', async (event, id: string) => {
   const item = downloads.get(id);
   if (!item) {
     logging.error(`transfer-start: item ${id} not found`);
@@ -251,7 +326,7 @@ ipcMain.handle('transfer-start', async (event, id) => {
     }
     const ttl = Math.max(0, transfer.expiresAt - Date.now());
     item.transferTimer = setTimeout(() => {
-      closeTransferServer(item.transfer?.server);
+      closeTransferServer(item.transfer?.server || null);
       if (downloads.get(id) === item) {
         item.transfer = null;
         item.status = strings.status.ready;
@@ -261,7 +336,7 @@ ipcMain.handle('transfer-start', async (event, id) => {
     sendUpdate(id);
 
     return { id, transfer: { url, qr } };
-  } catch (error) {
+  } catch (error: any) {
     logging.error(`transfer server start failed: ${error.message}`, error);
     item.error = `Siuntimas nepavyko: ${error.message}`;
     sendUpdate(id);
@@ -269,7 +344,7 @@ ipcMain.handle('transfer-start', async (event, id) => {
   }
 });
 
-ipcMain.handle('transfer-stop', async (event, id) => {
+ipcMain.handle('transfer-stop', async (event, id: string) => {
   const item = downloads.get(id);
   if (!item || !item.transfer) {
     return;

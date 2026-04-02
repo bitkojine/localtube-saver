@@ -1,31 +1,31 @@
-const fs = require('fs');
-const path = require('path');
-const { LOG_DIR } = require('./config');
+import * as fs from 'fs';
+import * as path from 'path';
+import { LOG_DIR } from './config';
 
-const LogLevels = {
-  DEBUG: 'DEBUG',
-  INFO: 'INFO',
-  WARN: 'WARN',
-  ERROR: 'ERROR'
-};
+enum LogLevel {
+  DEBUG = 'DEBUG',
+  INFO = 'INFO',
+  WARN = 'WARN',
+  ERROR = 'ERROR'
+}
 
-function ensureLogDir() {
+function ensureLogDir(): void {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
   }
 }
 
-function logFilePath() {
+function logFilePath(): string {
   const date = new Date().toISOString().slice(0, 10);
   return path.join(LOG_DIR, `${date}.log`);
 }
 
-function formatLog(level, message) {
+function formatLog(level: LogLevel, message: string): string {
   const timestamp = new Date().toISOString();
   return `[${timestamp}] [${level}] ${message}\n`;
 }
 
-function write(level, message) {
+function write(level: LogLevel, message: string): void {
   try {
     ensureLogDir();
     const entry = formatLog(level, message);
@@ -36,30 +36,31 @@ function write(level, message) {
   }
 }
 
-function info(message) {
-  write(LogLevels.INFO, message);
+export function info(message: string): void {
+  write(LogLevel.INFO, message);
 }
 
-function warn(message) {
-  write(LogLevels.WARN, message);
+export function warn(message: string): void {
+  write(LogLevel.WARN, message);
 }
 
-function error(message, err = null) {
+export function error(message: string, err: any = null): void {
   let msg = message;
   if (err) {
-    msg += ` | Error: ${err.message}`;
-    if (err.stack) {
+    const errMsg = err instanceof Error ? err.message : (err.message || err.type || (typeof err === 'object' ? JSON.stringify(err) : String(err)));
+    msg += ` | Error: ${errMsg}`;
+    if (err instanceof Error && err.stack) {
       msg += `\nStack trace:\n${err.stack}`;
     }
   }
-  write(LogLevels.ERROR, msg);
+  write(LogLevel.ERROR, msg);
 }
 
-function debug(message) {
-  write(LogLevels.DEBUG, message);
+export function debug(message: string): void {
+  write(LogLevel.DEBUG, message);
 }
 
-function cleanupOldLogs() {
+export function cleanupOldLogs(): void {
   try {
     ensureLogDir();
     const files = fs.readdirSync(LOG_DIR);
@@ -77,12 +78,5 @@ function cleanupOldLogs() {
   }
 }
 
-module.exports = {
-  info,
-  warn,
-  error,
-  debug,
-  cleanupOldLogs,
-  // Maintain backward compatibility for now
-  writeLog: info
-};
+// Maintain backward compatibility for now
+export const writeLog = info;

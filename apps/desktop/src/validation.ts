@@ -1,5 +1,5 @@
-function extractVideoId(rawUrl) {
-  let url;
+export function extractVideoId(rawUrl: string): string | null {
+  let url: URL;
   try {
     url = new URL(rawUrl);
   } catch (error) {
@@ -25,10 +25,6 @@ function extractVideoId(rawUrl) {
   return null;
 }
 
-function isValidId(id) {
+function isValidId(id: string | null): id is string {
   return typeof id === 'string' && id.length === 11;
 }
-
-module.exports = {
-  extractVideoId
-};
