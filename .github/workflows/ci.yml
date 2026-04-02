@@ -16,6 +16,9 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,7 +43,7 @@ jobs:
         working-directory: apps/desktop
 
       - name: Build Electron app (no publish)
-        run: pnpm run build -- --publish never
+        run: pnpm run build -- --publish=never
         working-directory: apps/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

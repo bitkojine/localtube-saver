@@ -44,7 +44,7 @@ jobs:
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('apps/desktop/package.json', 'utf8')); pkg.version = '$VERSION'; fs.writeFileSync('apps/desktop/package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Build and Publish Electron app
-        run: pnpm run build -- --publish always
+        run: pnpm run build -- --publish=always
         working-directory: apps/desktop
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
