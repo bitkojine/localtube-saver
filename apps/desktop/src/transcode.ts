@@ -41,7 +41,7 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
         const audioStream = (parsed.streams || []).find((s: any) => s.codec_type === 'audio');
         const audioBitrate = Number(audioStream?.bit_rate || 0);
         resolve({ duration, audioBitrate });
-      } catch (error) {
+      } catch (_error) {
         reject(new Error('PROBE_PARSE_FAILED'));
       }
     });

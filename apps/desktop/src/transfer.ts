@@ -87,7 +87,7 @@ export async function createTransferServer(filePath: string): Promise<TransferIn
     const fileName = path.basename(filePath);
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Length', stats.size);
-    // Use RFC 5987 for non-ASCII filename support
+    
     const encodedFileName = encodeURIComponent(fileName);
     res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}"; filename*=UTF-8''${encodedFileName}`);
 

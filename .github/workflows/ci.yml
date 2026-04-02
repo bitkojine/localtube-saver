@@ -35,6 +35,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --filter localtube-desktop
 
+      - name: Lint
+        run: pnpm run lint
+        working-directory: apps/desktop
+
       - name: Build Electron app (no publish)
         run: pnpm run build -- --publish never
         working-directory: apps/desktop

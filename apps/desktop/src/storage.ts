@@ -16,8 +16,8 @@ function loadCache(): Cache {
     if (fs.existsSync(CACHE_FILE)) {
       return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
     }
-  } catch (error) {
-    // ignore
+  } catch (_error) {
+    
   }
   return {};
 }
@@ -26,8 +26,8 @@ function saveCache(cache: Cache): void {
   try {
     ensureOutputDir();
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
-  } catch (error) {
-    // ignore
+  } catch (_error) {
+    
   }
 }
 
@@ -66,9 +66,8 @@ export function ensureUniquePath(filePath: string): string {
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);
   let counter = 1;
-  let candidate = '';
   while (true) {
-    candidate = path.join(dir, `${base} (${counter})${ext}`);
+    const candidate = path.join(dir, `${base} (${counter})${ext}`);
     if (!fs.existsSync(candidate)) {
       return candidate;
     }
@@ -78,11 +77,11 @@ export function ensureUniquePath(filePath: string): string {
 
 export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): boolean {
   try {
-    // Note: statfsSync is available in Node 18.15.0+ and 20.0.0+
+    
     const stats = fs.statfsSync(targetDir);
-    const free = stats.bavail * stats.bsize;
+    const free = Number(stats.bavail) * Number(stats.bsize);
     return free >= requiredBytes;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

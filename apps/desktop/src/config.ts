@@ -28,6 +28,6 @@ export const PROGRESS_UPDATE_MIN_MS = 500;
 export const MAX_CONCURRENT_DOWNLOADS = 2;
 export const COOKIES_FROM_BROWSER = 'chrome';
 
-// See https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+
 export const YOUTUBE_PO_TOKEN = '';
 export const YOUTUBE_VISITOR_DATA = '';

@@ -337,7 +337,33 @@ When in doubt:
 
 ---
 
-## 17. Acceptance Criteria
+## 18. Code Standards (No-Comments Policy)
+
+### 18.1 Strict Zero-Tolerance for Comments
+- Source code files (`.ts`, `.js`) MUST NOT contain any comments (single-line or multi-line).
+- The codebase MUST be self-documenting through clear variable/function naming and logical structure.
+
+### 18.2 Documentation
+- All technical documentation, explanations, "TODOs", or "FIXMEs" MUST be moved to `.md` files in the repository.
+- If a specific logic block requires explanation, create a corresponding `.md` file (e.g., `DOCS.md` or specialized feature docs).
+
+### 18.3 Enforcement
+- Pre-commit hooks (`husky` + `lint-staged`) MUST block any commit containing comments.
+- CI/CD pipelines MUST fail if comments are detected in the codebase.
+
+### 18.4 Guidance for Automated Agents (Failure Recovery)
+- If linting fails due to `local/no-comments`:
+  1. Identify the file and line number of the comment.
+  2. Determine if the information in the comment is essential for future development.
+  3. If essential: Move the information to a relevant `.md` file or create a new one.
+  4. Remove the comment from the source code.
+  5. Refactor code for better clarity if the comment was explaining complex logic.
+  6. Re-run linting to verify.
+
+---
+
+## 19. Final Acceptance Criteria (Addition)
+- The repository MUST pass `pnpm run lint` without any "Comments are not allowed" errors.
 
 System is complete only if:
 

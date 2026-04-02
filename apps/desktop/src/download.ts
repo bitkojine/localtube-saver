@@ -97,7 +97,7 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
           sizeBytes: Number.isFinite(size) ? size : 0,
           audioBitrate
         });
-      } catch (err) {
+      } catch (_err) {
         logging.error(`[Pipeline] Failed to parse yt-dlp JSON output`, { stdout, stderr });
         reject({ type: 'INFO_PARSE_ERROR', stderr, stdout });
       }
@@ -232,12 +232,12 @@ export function cleanupTempFiles(): void {
         const fullPath = path.join(TEMP_DIR, entry);
         try {
           fs.unlinkSync(fullPath);
-        } catch (error) {
-          // ignore
+        } catch (_error) {
+          
         }
       }
     }
-  } catch (error) {
-    // ignore
+  } catch (_error) {
+    
   }
 }

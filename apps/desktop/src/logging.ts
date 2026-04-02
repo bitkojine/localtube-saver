@@ -31,7 +31,7 @@ function write(level: LogLevel, message: string): void {
     const entry = formatLog(level, message);
     fs.appendFileSync(logFilePath(), entry);
   } catch (error) {
-    // Fail silently to not crash the app due to logging issues
+    
     console.error('Logging failed:', error);
   }
 }
@@ -73,10 +73,10 @@ export function cleanupOldLogs(): void {
         fs.unlinkSync(fullPath);
       }
     }
-  } catch (error) {
-    // Ignore log cleanup errors.
+  } catch (_error) {
+    
   }
 }
 
-// Maintain backward compatibility for now
+
 export const writeLog = info;

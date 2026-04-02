@@ -35,7 +35,7 @@ interface DownloadItem {
   transferTimer: NodeJS.Timeout | null;
 }
 
-// Global crash handlers
+
 process.on('uncaughtException', (err) => {
   logging.error('Uncaught Exception', err);
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -60,7 +60,6 @@ function sendUpdate(id: string): void {
   const item = downloads.get(id);
   if (!item) return;
 
-  // Clone to avoid serializing circular or complex objects (like the express server)
   const updateData = {
     id: item.id,
     url: item.url,
@@ -247,7 +246,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('download-start', async (event, url: string) => {
+ipcMain.handle('download-start', async (_event, url: string) => {
   const id = `dl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   if (!extractVideoId(url)) {
@@ -273,7 +272,7 @@ ipcMain.handle('download-start', async (event, url: string) => {
   return { id };
 });
 
-ipcMain.handle('download-retry', async (event, id: string) => {
+ipcMain.handle('download-retry', async (_event, id: string) => {
   const item = downloads.get(id);
   if (!item) return;
   item.error = null;
@@ -284,7 +283,7 @@ ipcMain.handle('download-retry', async (event, id: string) => {
   return { id };
 });
 
-ipcMain.handle('transfer-start', async (event, id: string) => {
+ipcMain.handle('transfer-start', async (_event, id: string) => {
   const item = downloads.get(id);
   if (!item) {
     logging.error(`transfer-start: item ${id} not found`);
@@ -305,14 +304,14 @@ ipcMain.handle('transfer-start', async (event, id: string) => {
     const ip = getLocalIp();
     if (ip === '127.0.0.1') {
       logging.warn('transfer-start: getLocalIp returned 127.0.0.1. iPhone might not be able to connect.');
-      // Keep going, but this is a likely cause for "it doesn't work"
+      
       item.error = 'Vietinis tinklas nerastas. Telefonas gali neprisijungti.';
     }
     const url = `http://${ip}:${transfer.port}/transfer?token=${transfer.token}`;
     logging.info(`transfer server listening at ${url}`);
     const qr = await QRCode.toDataURL(url);
 
-    item.error = null; // Clear any previous errors on success
+    item.error = null; 
     item.transfer = {
       url,
       token: transfer.token,
@@ -344,7 +343,7 @@ ipcMain.handle('transfer-start', async (event, id: string) => {
   }
 });
 
-ipcMain.handle('transfer-stop', async (event, id: string) => {
+ipcMain.handle('transfer-stop', async (_event, id: string) => {
   const item = downloads.get(id);
   if (!item || !item.transfer) {
     return;

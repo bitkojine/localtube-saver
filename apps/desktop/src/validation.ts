@@ -1,24 +1,22 @@
 export function extractVideoId(rawUrl: string): string | null {
-  let url: URL;
   try {
-    url = new URL(rawUrl);
-  } catch (error) {
-    return null;
-  }
-
-  if (url.hostname === 'www.youtube.com' && url.pathname === '/watch') {
-    const id = url.searchParams.get('v');
-    if (isValidId(id) && url.searchParams.toString() === `v=${id}`) {
-      return id;
+    const url = new URL(rawUrl);
+    if (url.hostname === 'www.youtube.com' && url.pathname === '/watch') {
+      const id = url.searchParams.get('v');
+      if (isValidId(id) && url.searchParams.toString() === `v=${id}`) {
+        return id;
+      }
+      return null;
     }
-    return null;
-  }
 
-  if (url.hostname === 'youtu.be') {
-    const id = url.pathname.replace('/', '');
-    if (isValidId(id) && url.searchParams.toString() === '') {
-      return id;
+    if (url.hostname === 'youtu.be') {
+      const id = url.pathname.replace('/', '');
+      if (isValidId(id) && url.searchParams.toString() === '') {
+        return id;
+      }
+      return null;
     }
+  } catch (_error) {
     return null;
   }
 

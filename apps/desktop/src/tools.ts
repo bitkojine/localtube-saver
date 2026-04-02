@@ -23,12 +23,12 @@ export function getYtDlpPath(): string {
 }
 
 export function getFfmpegPath(): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  
   return require('ffmpeg-static');
 }
 
 export function getFfprobePath(): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  
   const ffprobe = require('ffprobe-static');
   return ffprobe.path || ffprobe;
 }
@@ -59,7 +59,7 @@ async function downloadFile(url: string, destination: string): Promise<void> {
           renameSync(tempPath, destination);
           resolve();
         } catch (err) {
-          try { unlinkSync(tempPath); } catch (ignore) { /* ignore */ }
+          try { unlinkSync(tempPath); } catch (_ignore) {  }
           reject(err);
         }
       }).on('error', reject);
