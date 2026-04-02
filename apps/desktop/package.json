@@ -1,7 +1,6 @@
 {
   "name": "localtube-desktop",
   "version": "0.1.1",
-  "type": "module",
   "private": true,
   "author": "LocalTube Team",
   "main": "dist-tsc/main.js",
