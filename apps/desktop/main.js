@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { extractVideoId } = require('./src/validation');
 const { TaskQueue } = require('./src/queue');
@@ -140,6 +141,24 @@ app.whenReady().then(() => {
   logging.cleanupOldLogs();
   createWindow();
 
+  autoUpdater.checkForUpdatesAndNotify();
+
+  autoUpdater.on('update-available', () => {
+    mainWindow?.webContents.send('update-available');
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    mainWindow?.webContents.send('update-progress', progressObj.percent);
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-downloaded');
+  });
+
+  autoUpdater.on('error', (err) => {
+    logging.error('Update error:', err);
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -263,4 +282,8 @@ ipcMain.handle('transfer-stop', async (event, id) => {
   }
   item.status = strings.status.ready;
   sendUpdate(id);
+});
+
+ipcMain.handle('update-restart', () => {
+  autoUpdater.quitAndInstall();
 });

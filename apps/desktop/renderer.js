@@ -2,6 +2,9 @@ const list = document.getElementById('list');
 const template = document.getElementById('itemTemplate');
 const input = document.getElementById('urlInput');
 const downloadBtn = document.getElementById('downloadBtn');
+const updateNotification = document.getElementById('update-notification');
+const updateStatus = document.getElementById('update-status');
+const updateRestartBtn = document.getElementById('update-restart-btn');
 
 const items = new Map();
 
@@ -65,6 +68,24 @@ function renderItem(data) {
 
 window.localtube.onUpdate((data) => {
   renderItem(data);
+});
+
+window.localtube.onUpdateAvailable(() => {
+  updateNotification.classList.remove('hidden');
+  updateStatus.textContent = 'Yra nauja versija. Atsisiunčiama...';
+});
+
+window.localtube.onUpdateProgress((percent) => {
+  updateStatus.textContent = `Atsisiunčiama nauja versija: ${Math.round(percent)}%`;
+});
+
+window.localtube.onUpdateDownloaded(() => {
+  updateStatus.textContent = 'Nauja versija paruošta.';
+  updateRestartBtn.classList.remove('hidden');
+});
+
+updateRestartBtn.addEventListener('click', () => {
+  window.localtube.restartForUpdate();
 });
 
 async function startDownload() {

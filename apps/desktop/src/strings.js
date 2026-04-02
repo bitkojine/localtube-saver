@@ -9,7 +9,13 @@ module.exports = {
     transcoding: 'Konvertuojama...',
     ready: 'Paruošta',
     readyToSend: 'Paruošta siuntimui',
-    openOnPhone: 'Atsidarykite nuorodą telefone'
+    openOnPhone: 'Atsidarykite nuorodą telefone',
+    updateAvailable: 'Yra nauja versija',
+    updateDownloading: 'Atsisiunčiama nauja versija...',
+    updateDownloaded: 'Nauja versija paruošta'
+  },
+  updates: {
+    restart: 'Perkrauti ir atnaujinti'
   },
   errors: {
     invalidUrl: 'Neteisinga nuoroda',

@@ -121,3 +121,44 @@ body {
   border-radius: 8px;
   border: 1px solid #e0e0db;
 }
+
+.update-notification {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #2f5d50;
+  color: #fff;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1000;
+  animation: slide-in 0.3s ease-out;
+}
+
+.update-notification button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #fff;
+  color: #2f5d50;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
