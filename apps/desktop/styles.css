@@ -148,6 +148,15 @@ body {
   cursor: pointer;
 }
 
+.footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e0db;
+  text-align: center;
+  color: #8c8c8c;
+  font-size: 13px;
+}
+
 .hidden {
   display: none !important;
 }

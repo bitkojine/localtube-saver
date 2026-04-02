@@ -17,3 +17,4 @@ bin/
 dist-tsc/
 apps/desktop/e2e_download.js
 apps/desktop/e2e_full_workflow.js
+*.txt

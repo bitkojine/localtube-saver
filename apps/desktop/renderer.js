@@ -5,8 +5,18 @@ const downloadBtn = document.getElementById('downloadBtn');
 const updateNotification = document.getElementById('update-notification');
 const updateStatus = document.getElementById('update-status');
 const updateRestartBtn = document.getElementById('update-restart-btn');
+const versionDisplay = document.getElementById('version-display');
 
 const items = new Map();
+
+async function init() {
+  const version = await window.localtube.getVersion();
+  if (versionDisplay) {
+    versionDisplay.textContent = `v${version}`;
+  }
+}
+
+init();
 
 function renderItem(data) {
   let node = items.get(data.id);

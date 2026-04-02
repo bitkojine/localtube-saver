@@ -283,6 +283,10 @@ ipcMain.handle('download-retry', async (_event, id: string) => {
   return { id };
 });
 
+ipcMain.handle('app-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('transfer-start', async (_event, id: string) => {
   const item = downloads.get(id);
   if (!item) {
