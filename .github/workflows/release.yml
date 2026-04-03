@@ -3,15 +3,23 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 0.1.2)'
+      bump:
+        description: 'Version bump type'
         required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
   tag:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      new_version: ${{ steps.calc_version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,21 +31,41 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Calculate new version
+        id: calc_version
+        shell: bash
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump }}"
+          CURRENT_VERSION=$(node -e "console.log(require('./apps/desktop/package.json').version)")
+          echo "Current version: $CURRENT_VERSION"
+          
+          NEXT_VERSION=$(node -e "
+            const semver = '$CURRENT_VERSION'.split('.').map(Number);
+            const type = '$BUMP_TYPE';
+            if (type === 'major') { semver[0]++; semver[1] = 0; semver[2] = 0; }
+            else if (type === 'minor') { semver[1]++; semver[2] = 0; }
+            else { semver[2]++; }
+            console.log(semver.join('.'));
+          ")
+          
+          echo "Next version: $NEXT_VERSION"
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+
       - name: Update version in package.json
         shell: bash
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${{ steps.calc_version.outputs.version }}"
           echo "Updating version to $VERSION"
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('apps/desktop/package.json', 'utf8')); pkg.version = '$VERSION'; fs.writeFileSync('apps/desktop/package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Commit and Push Version Change
         run: |
           git add apps/desktop/package.json
-          git diff --staged --quiet || (git commit -S -m "chore: bump version to v${{ github.event.inputs.version }}" && git push)
+          git diff --staged --quiet || (git commit -S -m "chore: bump version to v${{ steps.calc_version.outputs.version }}" && git push)
 
       - name: Create and Push Tag
         run: |
-          TAG="v${{ github.event.inputs.version }}"
+          TAG="v${{ steps.calc_version.outputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skipping creation."
           else
@@ -61,7 +89,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v${{ github.event.inputs.version }}
+          ref: v${{ needs.tag.outputs.new_version }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
