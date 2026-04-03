@@ -98,11 +98,12 @@ export async function ensureYtDlp(): Promise<string> {
     await downloadFile(url, target);
     writeFileSync(marker, today);
     chmodSync(target, 0o755);
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (!existsSync(target)) {
       throw error;
     }
-    logging.error(`yt-dlp update failed, using existing version: ${error.message}`);
+    const err = error as Error;
+    logging.error(`yt-dlp update failed, using existing version: ${err.message}`);
   }
   return target;
 }

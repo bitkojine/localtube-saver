@@ -201,8 +201,9 @@ export async function downloadVideo(url: string, onProgress: (percent: number) =
     try {
       await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress);
       return { info, tempPath };
-    } catch (error: any) {
-      if (error.type === 'FORMAT_ERROR') {
+    } catch (error: unknown) {
+      const err = error as { type?: string };
+      if (err.type === 'FORMAT_ERROR') {
         try {
           await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress);
           return { info, tempPath };

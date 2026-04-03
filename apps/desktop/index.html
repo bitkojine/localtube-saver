@@ -19,6 +19,13 @@
       </section>
 
       <section id="list" class="list"></section>
+
+      <section class="storage-section">
+        <h2 id="storageTitle"></h2>
+        <div id="storageStats" class="storage-stats"></div>
+        <div id="storageList" class="storage-list"></div>
+      </section>
+
       <div id="update-notification" class="update-notification hidden">
         <span id="update-status"></span>
         <button id="update-restart-btn" class="hidden">Perkrauti ir atnaujinti</button>
@@ -46,6 +53,16 @@
       </div>
     </template>
 
-    <script src="renderer.js"></script>
+    <template id="storageItemTemplate">
+      <div class="storage-item">
+        <div class="storage-item-info">
+          <div class="storage-item-name"></div>
+          <div class="storage-item-details"></div>
+        </div>
+        <button class="delete-btn"></button>
+      </div>
+    </template>
+
+    <script type="module" src="dist-tsc/renderer.js"></script>
   </body>
 </html>

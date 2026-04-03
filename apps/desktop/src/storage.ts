@@ -85,3 +85,44 @@ export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): bo
     return false;
   }
 }
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+  createdAt: number;
+}
+
+export function getFilesInfo(): FileInfo[] {
+  ensureOutputDir();
+  try {
+    const files = fs.readdirSync(OUTPUT_DIR);
+    return files
+      .filter((file) => !file.startsWith('.')) 
+      .map((file) => {
+        const filePath = path.join(OUTPUT_DIR, file);
+        const stats = fs.statSync(filePath);
+        return {
+          name: file,
+          path: filePath,
+          size: stats.size,
+          createdAt: stats.birthtimeMs
+        };
+      })
+      .sort((a, b) => b.createdAt - a.createdAt);
+  } catch (_error) {
+    return [];
+  }
+}
+
+export function deleteFile(filePath: string): boolean {
+  try {
+    if (fs.existsSync(filePath) && filePath.startsWith(OUTPUT_DIR)) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+  } catch (_error) {
+    
+  }
+  return false;
+}

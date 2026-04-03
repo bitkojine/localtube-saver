@@ -5,7 +5,16 @@ import { extractVideoId } from './src/validation';
 import { TaskQueue } from './src/queue';
 import { getVideoInfo, downloadVideo, cleanupTempFiles, VideoInfo } from './src/download';
 import { transcodeToMp4 } from './src/transcode';
-import { buildOutputPath, ensureUniquePath, hasEnoughDiskSpace, ensureOutputDir, getCachedPath, setCachedPath } from './src/storage';
+import {
+  buildOutputPath,
+  ensureUniquePath,
+  hasEnoughDiskSpace,
+  ensureOutputDir,
+  getCachedPath,
+  setCachedPath,
+  getFilesInfo,
+  deleteFile
+} from './src/storage';
 import { createTransferServer, closeTransferServer } from './src/transfer';
 import * as logging from './src/logging';
 import { getLocalIp, throttle } from './src/util';
@@ -135,12 +144,6 @@ function runPipeline(item: DownloadItem): void {
       });
 
       logging.info(`[Pipeline] Transcoding finished: ${outputPath}`);
-      try {
-        if (item.tempPath) fs.unlinkSync(item.tempPath);
-      } catch (error) {
-        logging.warn(`[Pipeline] Failed to delete temp file: ${item.tempPath}`);
-      }
-
       item.outputPath = outputPath;
       if (videoId) {
         setCachedPath(videoId, outputPath);
@@ -149,11 +152,12 @@ function runPipeline(item: DownloadItem): void {
       item.progress = 100;
       item.error = null;
       sendUpdate(item.id);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logging.error('[Pipeline] Global failure', error);
       
       let errorMsg = strings.errors.downloadFailed;
-      const errorType = error.type || error.message || 'UNKNOWN';
+      const errorTyped = error as { type?: string; message?: string; stderr?: string };
+      const errorType = errorTyped.type || errorTyped.message || 'UNKNOWN';
 
       if (errorType === 'INFO_ERROR' || errorType === 'INFO_PARSE_ERROR') {
         errorMsg = strings.errors.infoError;
@@ -167,15 +171,15 @@ function runPipeline(item: DownloadItem): void {
         errorMsg = strings.errors.extractionError;
       }
       
-      if (error.stderr) {
-        logging.error(`[Pipeline] Captured stderr: ${error.stderr}`);
-        if (error.stderr.includes('Sign in to confirm you’re not a bot')) {
+      if (errorTyped.stderr) {
+        logging.error(`[Pipeline] Captured stderr: ${errorTyped.stderr}`);
+        if (errorTyped.stderr.includes('Sign in to confirm you’re not a bot')) {
           errorMsg = 'YouTube prašo patvirtinti, kad nesate robotas.';
-        } else if (error.stderr.includes('This video is age-restricted')) {
+        } else if (errorTyped.stderr.includes('This video is age-restricted')) {
           errorMsg = 'Vaizdo įrašas turi amžiaus ribojimą.';
-        } else if (error.stderr.includes('Video unavailable')) {
+        } else if (errorTyped.stderr.includes('Video unavailable')) {
           errorMsg = 'Vaizdo įrašas nepasiekiamas.';
-        } else if (error.stderr.includes('GVS PO Token')) {
+        } else if (errorTyped.stderr.includes('GVS PO Token')) {
           errorMsg = 'YouTube reikalauja papildomo patvirtinimo (PO Token). Bandykite vėliau arba atnaujinkite nustatymus.';
         }
       }
@@ -183,6 +187,18 @@ function runPipeline(item: DownloadItem): void {
       item.error = errorMsg;
       item.status = strings.status.ready;
       sendUpdate(item.id);
+    } finally {
+      if (item.tempPath) {
+        try {
+          if (fs.existsSync(item.tempPath)) {
+            fs.unlinkSync(item.tempPath);
+            logging.info(`[Pipeline] Cleanup: Deleted temp file ${item.tempPath}`);
+          }
+          item.tempPath = undefined;
+        } catch (error) {
+          logging.warn(`[Pipeline] Cleanup: Failed to delete temp file ${item.tempPath}`);
+        }
+      }
     }
   });
 }
@@ -192,7 +208,7 @@ function createWindow(): void {
     width: 900,
     height: 700,
     webPreferences: {
-      preload: path.join(__dirname, '..', 'preload.js')
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 
@@ -229,7 +245,7 @@ app.whenReady().then(() => {
     mainWindow?.webContents.send('update-downloaded');
   });
 
-  autoUpdater.on('error', (err) => {
+  autoUpdater.on('error', (err: Error) => {
     logging.error('Update error:', err);
   });
 
@@ -339,11 +355,12 @@ ipcMain.handle('transfer-start', async (_event, id: string) => {
     sendUpdate(id);
 
     return { id, transfer: { url, qr } };
-  } catch (error: any) {
-    logging.error(`transfer server start failed: ${error.message}`, error);
-    item.error = `Siuntimas nepavyko: ${error.message}`;
+  } catch (error: unknown) {
+    const err = error as Error;
+    logging.error(`transfer server start failed: ${err.message}`, err);
+    item.error = `Siuntimas nepavyko: ${err.message}`;
     sendUpdate(id);
-    return { error: `Siuntimas nepavyko: ${error.message}` };
+    return { error: `Siuntimas nepavyko: ${err.message}` };
   }
 });
 
@@ -364,4 +381,12 @@ ipcMain.handle('transfer-stop', async (_event, id: string) => {
 
 ipcMain.handle('update-restart', () => {
   autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('storage-get-files', () => {
+  return getFilesInfo();
+});
+
+ipcMain.handle('storage-delete-file', (_event, filePath: string) => {
+  return deleteFile(filePath);
 });

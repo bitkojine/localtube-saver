@@ -1,16 +1,16 @@
 import { MAX_CONCURRENT_DOWNLOADS } from './config';
 
-type Task<T = any> = () => Promise<T> | T;
+type Task<T> = () => Promise<T> | T;
 
-interface QueueItem<T = any> {
+interface QueueItem<T> {
   task: Task<T>;
   resolve: (value: T | PromiseLike<T>) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: unknown) => void;
 }
 
 export class TaskQueue {
   private concurrency: number;
-  private queue: QueueItem[] = [];
+  private queue: QueueItem<unknown>[] = [];
   private activeCount: number = 0;
 
   constructor(concurrency: number = MAX_CONCURRENT_DOWNLOADS) {
@@ -19,7 +19,7 @@ export class TaskQueue {
 
   add<T>(task: Task<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.queue.push({ task, resolve, reject });
+      this.queue.push({ task, resolve, reject } as QueueItem<unknown>);
       this.next();
     });
   }

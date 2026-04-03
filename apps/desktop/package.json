@@ -1,6 +1,6 @@
 {
   "name": "localtube-desktop",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "author": "LocalTube Team",
   "main": "dist-tsc/main.js",
@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "pnpm run build:ts && electron .",
-    "build:ts": "tsc",
+    "build:ts": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
     "lint": "eslint .",
     "build": "pnpm run build:ts && electron-builder"
   },
@@ -39,6 +39,7 @@
       "artifactName": "LocalTube-Saver-${version}.${ext}"
     }
   },
+  "type": "commonjs",
   "dependencies": {
     "electron-updater": "^6.8.3",
     "express": "4.19.2",

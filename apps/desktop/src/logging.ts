@@ -44,10 +44,11 @@ export function warn(message: string): void {
   write(LogLevel.WARN, message);
 }
 
-export function error(message: string, err: any = null): void {
+export function error(message: string, err: unknown = null): void {
   let msg = message;
   if (err) {
-    const errMsg = err instanceof Error ? err.message : (err.message || err.type || (typeof err === 'object' ? JSON.stringify(err) : String(err)));
+    const errorTyped = err as { message?: string; type?: string; stack?: string };
+    const errMsg = err instanceof Error ? err.message : (errorTyped.message || errorTyped.type || (typeof err === 'object' ? JSON.stringify(err) : String(err)));
     msg += ` | Error: ${errMsg}`;
     if (err instanceof Error && err.stack) {
       msg += `\nStack trace:\n${err.stack}`;

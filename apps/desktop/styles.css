@@ -161,6 +161,81 @@ body {
   display: none !important;
 }
 
+.storage-section {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid #e0e0db;
+}
+
+.storage-section h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.storage-stats {
+  font-size: 14px;
+  color: #4b4b4b;
+  margin-bottom: 20px;
+}
+
+.storage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.storage-item {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  border: 1px solid #e0e0db;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.storage-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.storage-item-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storage-item-details {
+  font-size: 12px;
+  color: #6a6a6a;
+}
+
+.delete-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #d4d4cf;
+  background: #fff;
+  color: #b23a3a;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background: #fff0f0;
+  border-color: #b23a3a;
+}
+
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @keyframes slide-in {
   from {
     transform: translateY(20px);

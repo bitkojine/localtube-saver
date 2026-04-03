@@ -27,6 +27,14 @@ const strings = {
     formatError: 'Nepavyko rasti tinkamo formato',
     extractionError: 'Vaizdo įrašo gavimo klaida (galbūt amžiaus ribojimas?)',
     unknownError: 'Nežinoma klaida'
+  },
+  storage: {
+    title: 'Mano vaizdo įrašai',
+    empty: 'Dar nėra atsisiųstų vaizdo įrašų',
+    delete: 'Ištrinti',
+    confirmDelete: 'Ar tikrai norite ištrinti šį failą?',
+    size: 'Dydis',
+    totalSize: 'Viso užimama vieta'
   }
 };
 

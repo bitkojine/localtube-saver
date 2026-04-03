@@ -54,7 +54,14 @@
 
 ---
 
-## 🏗️ Technical Architecture
+## 🏗️ Technical Architecture & Module Strategy
+
+This application uses a specific dual-module architecture to ensure compatibility between Electron's Node.js environment and the browser-based renderer:
+
+- **Main & Preload Processes (CommonJS):** These run in Node.js and use `module.exports`/`require`. They are compiled from TypeScript using `tsconfig.json`.
+- **Renderer Process (ES Modules):** The UI runs in a browser context and uses standard `import`/`export`. It is compiled using `tsconfig.renderer.json` and loaded in `index.html` via `<script type="module">`.
+
+**Crucial:** Never mix these strategies. Changing the renderer to CommonJS will break the UI with "exports is not defined" errors. Always refer to `AGENTS.md` before making architectural changes.
 
 - **Frontend:** HTML5/CSS3 with a vanilla TypeScript renderer for maximum performance.
 - **Main Process:** Electron (TypeScript) managing the download/transcode pipeline.
@@ -90,6 +97,7 @@ This project maintains high reliability by implementing several advanced techniq
 
 - `apps/desktop/` — Main Electron application source.
 - `apps/desktop/src/` — Core TypeScript logic (Download, Transcode, Transfer).
+- `AGENTS.md` — Critical coding guidelines for AI agents and human developers.
 - `.github/workflows/` — CI and Release automation.
 - `Contract.md` — Technical specification and source of truth for behavior.
 

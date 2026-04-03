@@ -15,5 +15,5 @@
     "allowJs": true
   },
   "include": ["main.ts", "src/**/*.ts", "preload.ts"],
-  "exclude": ["node_modules", "dist", "dist-tsc"]
+  "exclude": ["node_modules", "dist", "dist-tsc", "renderer.ts"]
 }

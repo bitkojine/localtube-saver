@@ -36,9 +36,9 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
       }
 
       try {
-        const parsed = JSON.parse(stdout);
+        const parsed = JSON.parse(stdout) as { format?: { duration?: string }; streams?: { codec_type?: string; bit_rate?: string }[] };
         const duration = Number(parsed.format?.duration || 0);
-        const audioStream = (parsed.streams || []).find((s: any) => s.codec_type === 'audio');
+        const audioStream = (parsed.streams || []).find((s) => s.codec_type === 'audio');
         const audioBitrate = Number(audioStream?.bit_rate || 0);
         resolve({ duration, audioBitrate });
       } catch (_error) {

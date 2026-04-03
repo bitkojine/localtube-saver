@@ -18,7 +18,7 @@ export function getLocalIp(): string {
   return '127.0.0.1';
 }
 
-export function throttle<T extends (...args: any[]) => any>(fn: T, minIntervalMs: number): (...args: Parameters<T>) => void {
+export function throttle<T extends (...args: never[]) => unknown>(fn: T, minIntervalMs: number): (...args: Parameters<T>) => void {
   let lastAt = 0;
   let pending: NodeJS.Timeout | null = null;
   

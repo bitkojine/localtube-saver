@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
-import noCommentsRule from "./eslint-rules/no-comments.js";
+import noCommentsRule from "./eslint-rules/no-comments.mjs";
 
 export default [
   js.configs.recommended,
@@ -27,7 +27,12 @@ export default [
         clearTimeout: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
-        URL: "readonly"
+        URL: "readonly",
+        HTMLElement: "readonly",
+        HTMLTemplateElement: "readonly",
+        HTMLInputElement: "readonly",
+        HTMLButtonElement: "readonly",
+        KeyboardEvent: "readonly"
       }
     },
     plugins: {
