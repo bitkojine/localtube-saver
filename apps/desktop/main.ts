@@ -262,6 +262,23 @@ app.on('window-all-closed', () => {
   }
 });
 
+ipcMain.on('app-log', (_event, { level, message, err }) => {
+  switch (level) {
+    case 'info':
+      logging.info(message);
+      break;
+    case 'warn':
+      logging.warn(message);
+      break;
+    case 'error':
+      logging.error(message, err);
+      break;
+    case 'debug':
+      logging.debug(message);
+      break;
+  }
+});
+
 ipcMain.handle('download-start', async (_event, url: string) => {
   const id = `dl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -389,4 +406,61 @@ ipcMain.handle('storage-get-files', () => {
 
 ipcMain.handle('storage-delete-file', (_event, filePath: string) => {
   return deleteFile(filePath);
+});
+
+ipcMain.handle('transfer-start-by-path', async (_event, filePath: string) => {
+  logging.info(`transfer-start-by-path requested for: ${filePath}`);
+  const id = `storage-transfer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  if (!fs.existsSync(filePath)) {
+    logging.error(`transfer-start-by-path: file not found at ${filePath}`);
+    return { error: 'Failas nerastas diske' };
+  }
+
+  try {
+    logging.info(`starting transfer server for ${filePath}`);
+    const transfer = await createTransferServer(filePath);
+    const ip = getLocalIp();
+    if (ip === '127.0.0.1') {
+      logging.warn('transfer-start-by-path: getLocalIp returned 127.0.0.1. iPhone might not be able to connect.');
+    }
+    const url = `http://${ip}:${transfer.port}/transfer?token=${transfer.token}`;
+    logging.info(`transfer server listening at ${url}`);
+    const qr = await QRCode.toDataURL(url);
+
+    const item: DownloadItem = {
+      id,
+      url: '',
+      title: path.basename(filePath),
+      status: strings.status.openOnPhone,
+      progress: 100,
+      error: null,
+      outputPath: filePath,
+      transfer: {
+        url,
+        token: transfer.token,
+        qr,
+        expiresAt: transfer.expiresAt,
+        server: transfer.server
+      },
+      transferTimer: null
+    };
+
+    const ttl = Math.max(0, transfer.expiresAt - Date.now());
+    item.transferTimer = setTimeout(() => {
+      closeTransferServer(item.transfer?.server || null);
+      if (downloads.get(id) === item) {
+        downloads.delete(id);
+      }
+    }, ttl);
+
+    downloads.set(id, item);
+
+    logging.info(`transfer-start-by-path successful for ${filePath}. ID: ${id}. Expires at ${new Date(transfer.expiresAt).toISOString()}`);
+    return { id, transfer: { url, qr, expiresAt: transfer.expiresAt } };
+  } catch (error: unknown) {
+    const err = error as Error;
+    logging.error(`transfer server start failed for ${filePath}: ${err.message}`, err);
+    return { error: `Siuntimas nepavyko: ${err.message}` };
+  }
 });

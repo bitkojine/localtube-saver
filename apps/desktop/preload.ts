@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('localtube', {
   getVersion: () => ipcRenderer.invoke('app-version'),
   getFiles: () => ipcRenderer.invoke('storage-get-files'),
   deleteFile: (filePath: string) => ipcRenderer.invoke('storage-delete-file', filePath),
+  startTransferByPath: (filePath: string) => ipcRenderer.invoke('transfer-start-by-path', filePath),
+  log: (level: 'info' | 'warn' | 'error' | 'debug', message: string, err?: unknown) => ipcRenderer.send('app-log', { level, message, err }),
   onUpdate: (callback: (data: unknown) => void) => ipcRenderer.on('download-update', (_, data) => callback(data)),
   onUpdateAvailable: (callback: () => void) => ipcRenderer.on('update-available', () => callback()),
   onUpdateProgress: (callback: (percent: number) => void) => ipcRenderer.on('update-progress', (_, percent) => callback(percent)),

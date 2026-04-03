@@ -47,6 +47,24 @@ Always architect to avoid race conditions:
 *   Source files should be `.ts`.
 *   Avoid legacy `.js` files in the source tree.
 
+#### 🩺 Production-Grade Logging & Debugging
+
+The project uses a centralized, file-based logging system that bridges both processes. **NEVER use `console.log`** for production features.
+
+1.  **Centralized Logging (`apps/desktop/src/logging.ts`):**
+    *   Logs are stored in `apps/desktop/dist-tsc/logs/` (or the equivalent in the packed app).
+    *   Logs are rotated daily and kept for 7 days.
+    *   Available levels: `DEBUG`, `INFO`, `WARN`, `ERROR`.
+
+2.  **Process Bridging:**
+    *   **Main Process:** Import and use `* as logging from './src/logging'`.
+    *   **Renderer Process:** Use `window.localtube.log(level, message, error?)`. This sends logs to the Main process via the `app-log` IPC channel to ensure they are persisted to the same file.
+
+3.  **Debugging Workflow:**
+    *   If a feature (like the QR code button) fails silently or behaves unexpectedly, first add `INFO` or `DEBUG` logs at key entry points and `ERROR` logs in catch blocks.
+    *   Rebuild and run the app locally: `pnpm run build:ts && cd apps/desktop && ./node_modules/.bin/electron .`.
+    *   Monitor the latest log file in `apps/desktop/dist-tsc/logs/` using `tail -f` to identify the root cause (e.g., `TypeError`, network timeout, or IPC mismatch).
+
 #### 🧪 Testing
 
 *   Always run `pnpm run lint` before committing.

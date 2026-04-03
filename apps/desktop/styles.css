@@ -236,6 +236,60 @@ body {
   cursor: not-allowed;
 }
 
+.qr-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #d4d4cf;
+  background: #fff;
+  color: #2f5d50;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.qr-btn:hover {
+  background: #f0f7f4;
+  border-color: #2f5d50;
+}
+
+.qr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.storage-qr {
+  background: #fff;
+  border: 1px solid #e0e0db;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 16px;
+  margin-top: -12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.storage-qr img {
+  width: 180px;
+  height: 180px;
+  border-radius: 8px;
+  border: 1px solid #e0e0db;
+}
+
+.ios-instructions {
+  font-size: 13px;
+  background: #f8f8f5;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e0e0db;
+  text-align: left;
+  line-height: 1.5;
+}
+
 @keyframes slide-in {
   from {
     transform: translateY(20px);

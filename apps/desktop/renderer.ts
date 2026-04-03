@@ -34,6 +34,8 @@ interface LocaltubeAPI {
   getVersion: () => Promise<string>;
   getFiles: () => Promise<FileInfo[]>;
   deleteFile: (filePath: string) => Promise<boolean>;
+  startTransferByPath: (filePath: string) => Promise<{ id?: string; error?: string; transfer?: TransferInfo }>;
+  log: (level: 'info' | 'warn' | 'error' | 'debug', message: string, err?: unknown) => void;
   onUpdate: (callback: (data: DownloadUpdate) => void) => void;
   onUpdateAvailable: (callback: () => void) => void;
   onUpdateProgress: (callback: (percent: number) => void) => void;
@@ -63,6 +65,8 @@ const storageItemTemplate = document.getElementById('storageItemTemplate') as HT
 
 const items = new Map<string, HTMLElement>();
 const storageItems = new Map<string, HTMLElement>();
+const storageTransfers = new Map<string, TransferInfo | null>();
+const storageServers = new Map<string, any>();
 
 const deletionsInProgress = new Set<string>();
 
@@ -104,7 +108,9 @@ async function loadStorage(): Promise<void> {
 
   for (const path of Array.from(storageItems.keys())) {
     if (!currentPaths.has(path)) {
-      storageItems.get(path)?.remove();
+      const node = storageItems.get(path);
+      node?.nextElementSibling?.remove(); 
+      node?.remove();
       storageItems.delete(path);
     }
   }
@@ -113,7 +119,11 @@ async function loadStorage(): Promise<void> {
     let node = storageItems.get(file.path);
     if (!node) {
       node = storageItemTemplate.content.firstElementChild?.cloneNode(true) as HTMLElement;
+      const qrContainer = storageItemTemplate.content.lastElementChild?.cloneNode(true) as HTMLElement;
+      qrContainer.setAttribute('data-path', file.path);
+      
       storageList.appendChild(node);
+      storageList.appendChild(qrContainer);
       storageItems.set(file.path, node);
 
       const deleteBtn = node.querySelector('.delete-btn') as HTMLButtonElement;
@@ -144,6 +154,47 @@ async function loadStorage(): Promise<void> {
           }
         }
       });
+
+      const qrBtn = node.querySelector('.qr-btn') as HTMLButtonElement;
+      qrBtn.addEventListener('click', async () => {
+        window.localtube.log('info', `QR button clicked for file: ${file.path}`);
+        const currentTransfer = storageTransfers.get(file.path);
+        if (currentTransfer) {
+          window.localtube.log('info', `Closing existing transfer for: ${file.path}`);
+          storageTransfers.set(file.path, null);
+          const serverId = storageServers.get(file.path);
+          if (serverId) {
+            await window.localtube.stopTransfer(serverId);
+            storageServers.delete(file.path);
+          }
+          await loadStorage();
+          return;
+        }
+
+        qrBtn.disabled = true;
+        qrBtn.textContent = 'Kraunama...';
+        try {
+          window.localtube.log('info', `Starting transfer by path: ${file.path}`);
+          const result = await window.localtube.startTransferByPath(file.path);
+          if (result.transfer) {
+            window.localtube.log('info', `Transfer started successfully for: ${file.path}`);
+            storageTransfers.set(file.path, result.transfer);
+            if (result.id) {
+              storageServers.set(file.path, result.id);
+            }
+            await loadStorage();
+          } else if (result.error) {
+            window.localtube.log('error', `Transfer failed for: ${file.path}`, result.error);
+            alert(result.error);
+          }
+        } catch (err: unknown) {
+          window.localtube.log('error', `Exception in QR button handler for: ${file.path}`, err);
+          alert('Įvyko klaida bandant sukurti QR kodą.');
+        } finally {
+          qrBtn.disabled = false;
+          qrBtn.textContent = 'QR Kodas';
+        }
+      });
     }
 
     const nameEl = node.querySelector('.storage-item-name');
@@ -158,6 +209,48 @@ async function loadStorage(): Promise<void> {
     } else {
       deleteBtn.disabled = false;
       deleteBtn.textContent = STORAGE_STRINGS.delete;
+    }
+
+    const qrBtn = node.querySelector('.qr-btn') as HTMLButtonElement;
+    const qrContainer = node.parentElement?.querySelector(`.storage-qr[data-path="${file.path.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`) as HTMLElement;
+    const transfer = storageTransfers.get(file.path);
+
+    if (transfer && transfer.qr) {
+      qrBtn.textContent = 'Uždaryti QR';
+      qrContainer.classList.remove('hidden');
+      qrContainer.innerHTML = '';
+      
+      const img = document.createElement('img');
+      img.src = transfer.qr;
+      const caption = document.createElement('div');
+      caption.textContent = 'Nuskenuokite kodą telefone.';
+      const hint = document.createElement('div');
+      hint.textContent = 'Telefonas ir kompiuteris turi būti prie to paties namų interneto.';
+      
+      const iosInstructions = document.createElement('div');
+      iosInstructions.className = 'ios-instructions';
+      iosInstructions.innerHTML = `
+        <strong>iPhone naudotojams:</strong><br>
+        1. Atidarykite nuorodą Safari naršyklėje.<br>
+        2. Paspauskite "Share" (dalintis) mygtuką.<br>
+        3. Pasirinkite "Save to Files" arba tiesiogiai "Save Video".
+      `;
+
+      qrContainer.appendChild(img);
+      qrContainer.appendChild(caption);
+      qrContainer.appendChild(hint);
+      qrContainer.appendChild(iosInstructions);
+      
+      if (transfer.url) {
+        const link = document.createElement('div');
+        link.className = 'link';
+        link.textContent = `Nuoroda: ${transfer.url}`;
+        qrContainer.appendChild(link);
+      }
+    } else {
+      qrBtn.textContent = 'QR Kodas';
+      qrContainer.classList.add('hidden');
+      qrContainer.innerHTML = '';
     }
   });
 }
