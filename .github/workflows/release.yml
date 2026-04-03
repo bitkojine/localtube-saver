@@ -33,13 +33,17 @@ jobs:
       - name: Commit and Push Version Change
         run: |
           git add apps/desktop/package.json
-          git commit -m "chore: bump version to v${{ github.event.inputs.version }}"
-          git push
+          git diff --staged --quiet || (git commit -S -m "chore: bump version to v${{ github.event.inputs.version }}" && git push)
 
       - name: Create and Push Tag
         run: |
-          git tag v${{ github.event.inputs.version }}
-          git push origin v${{ github.event.inputs.version }}
+          TAG="v${{ github.event.inputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping creation."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
 
   release:
     needs: tag
