@@ -89,7 +89,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v${{ needs.tag.outputs.new_version }}
+          ref: refs/tags/v${{ needs.tag.outputs.new_version }}
+          fetch-depth: 0
+
+      - name: Verify Tag
+        run: |
+          git describe --tags --always
+          echo "GITHUB_REF is $GITHUB_REF"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -112,5 +118,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF: refs/tags/v${{ needs.tag.outputs.new_version }}
+          GITHUB_REF_NAME: v${{ needs.tag.outputs.new_version }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
           DEBUG: electron-builder
