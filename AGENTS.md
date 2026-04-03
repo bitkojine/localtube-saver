@@ -69,3 +69,21 @@ The project uses a centralized, file-based logging system that bridges both proc
 
 *   Always run `pnpm run lint` before committing.
 *   If you modify the download or storage logic, create a temporary reproduction script to verify the fix and then delete it.
+
+#### 🚀 CI/CD & Release Pipeline
+
+To maintain a stable release process and avoid common CI/CD pitfalls, follow these patterns:
+
+1.  **Idempotent Version Bumping & Tagging:**
+    *   **Conditional Commit:** Never run `git commit` without checking if there are staged changes. Use `git diff --staged --quiet || (git commit ... && git push)` to prevent "nothing to commit" errors.
+    *   **Tag Existence Check:** Before creating a tag, check if it already exists using `git rev-parse "v$VERSION"`. This prevents pipeline crashes on manual retries or duplicate runs.
+
+2.  **Authentication & Signing in CI:**
+    *   **GPG Signing:** Automated CI bots (like `github-actions[bot]`) typically do not have a private GPG key in the runner environment. Avoid using the `-S` flag for automated commits unless a specific key is provided via secrets.
+    *   **Git Remote Configuration:** Ensure the remote is configured with a token for authenticated pushes: `git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git`.
+
+3.  **Reliable GitHub Releases with `electron-builder`:**
+    *   **Explicit Release Creation:** `electron-builder` can sometimes fail to create a release if it doesn't "see" the tag correctly. A more robust pattern is to manually create a **Draft** release using the GitHub CLI (`gh release create --draft`) before starting the build.
+    *   **Tag Context:** Always use `fetch-depth: 0` in the checkout step to pull all tags, and checkout the specific tag reference (e.g., `ref: refs/tags/v1.2.3`) to ensure the builder identifies the environment correctly.
+    *   **Finalization:** Use `gh release edit --draft=false` as a final step to move the release from draft to public once all platform assets (Windows, macOS) have been successfully uploaded.
+    *   **Strategy:** Set `fail-fast: false` in the build strategy to ensure that a failure on one OS doesn't prevent other OS artifacts from being uploaded to the same release.
