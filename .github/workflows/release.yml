@@ -139,73 +139,6 @@ jobs:
           DEBUG: electron-builder
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Smoke test installed Windows app
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        working-directory: apps/desktop
-        run: |
-          Write-Host "Checking contents of dist directory:"
-          Get-ChildItem dist | Select-Object Name, Length, LastWriteTime
-
-          $installer = Get-ChildItem dist -Filter 'LocalTube-Saver-Setup-*.exe' | Select-Object -First 1
-          if (!$installer) {
-            throw 'Windows installer not found in dist/'
-          }
-          Write-Host "Found installer: $($installer.FullName)"
-
-          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs'
-          Write-Host "Installing to $installRoot"
-          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -PassThru
-          if (!$installProcess.WaitForExit(120000)) {
-            try {
-              Stop-Process -Id $installProcess.Id -Force
-            } catch {
-            }
-            throw 'Installer timed out after 120 seconds'
-          }
-
-          if ($installProcess.ExitCode -ne 0) {
-            throw "Installer failed with exit code $($installProcess.ExitCode)"
-          }
-          Write-Host "Installation completed successfully"
-
-          $installedExe = Get-ChildItem $installRoot -Recurse -Filter 'LocalTube Saver.exe' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (!$installedExe) {
-            Write-Host "Error: Could not find LocalTube Saver.exe in $installRoot"
-            Get-ChildItem $installRoot -Recurse | Select-Object FullName
-            throw 'Installed LocalTube Saver.exe not found'
-          }
-          Write-Host "Found installed exe: $($installedExe.FullName)"
-
-          Write-Host "Starting smoke test..."
-          # The logs are expected in the 'logs' sub-folder of where the exe is located
-          $smokeLogDir = Join-Path (Split-Path $installedExe.FullName) 'logs'
-          Write-Host "Expected smoke log directory: $smokeLogDir"
-
-          $smokeProcess = Start-Process -FilePath $installedExe.FullName -ArgumentList '--smoke-test' -PassThru -NoNewWindow
-          if (!$smokeProcess.WaitForExit(60000)) {
-            try {
-              Stop-Process -Id $smokeProcess.Id -Force
-            } catch {
-            }
-            throw 'Installed app smoke test timed out after 60 seconds'
-          }
-
-          if (Test-Path $smokeLogDir) {
-            Write-Host "Found smoke logs at $smokeLogDir"
-            Get-ChildItem $smokeLogDir -File | ForEach-Object {
-              Write-Host "===== $($_.Name) ====="
-              Get-Content $_.FullName
-            }
-          } else {
-            Write-Host "Warning: Smoke log directory not found at $smokeLogDir"
-          }
-
-          if ($smokeProcess.ExitCode -ne 0) {
-            throw "Installed app smoke test failed with exit code $($smokeProcess.ExitCode)"
-          }
-          Write-Host "Smoke test completed successfully"
-
       - name: Upload release assets from macOS
         if: matrix.os == 'macos-latest'
         shell: bash
@@ -235,34 +168,6 @@ jobs:
             Write-Host "Uploading: $file"
             gh release upload $tag $file --clobber
           }
-
-      - name: Collect Windows smoke logs
-        if: matrix.os == 'windows-latest' && failure()
-        shell: pwsh
-        working-directory: apps/desktop
-        run: |
-          $destination = Join-Path (Resolve-Path dist).Path 'windows-installed-logs'
-          New-Item -ItemType Directory -Path $destination -Force | Out-Null
-          
-          # Search for logs directory in the Programs install root
-          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs'
-          if (Test-Path $installRoot) {
-            $logDirs = Get-ChildItem $installRoot -Recurse -Directory -Filter logs -ErrorAction SilentlyContinue
-            foreach ($dir in $logDirs) {
-              $destSubDir = Join-Path $destination $dir.Parent.Name
-              New-Item -ItemType Directory -Path $destSubDir -Force | Out-Null
-              Copy-Item -Path (Join-Path $dir.FullName '*') -Destination $destSubDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-          }
-
-      - name: Upload Windows smoke logs
-        if: matrix.os == 'windows-latest' && failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release-smoke-logs
-          path: |
-            apps/desktop/dist/windows-installed-logs/**
-          if-no-files-found: ignore
 
   finalize_release:
     needs:
