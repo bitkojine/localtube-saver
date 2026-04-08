@@ -120,7 +120,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install -w localtube-desktop
+        run: npm install
 
       - name: Build TypeScript
         run: npm run build:ts

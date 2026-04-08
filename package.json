@@ -15,6 +15,6 @@
     ]
   },
   "scripts": {
-    "prepare": "husky"
+    "prepare": "if [ \"$NODE_ENV\" != \"production\" ] && [ \"$CI\" != \"true\" ]; then husky; fi"
   }
 }
