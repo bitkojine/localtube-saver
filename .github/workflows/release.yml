@@ -87,7 +87,6 @@ jobs:
         os: [macos-latest, windows-latest]
 
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -129,8 +128,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --filter localtube-desktop
 
+      - name: Build TypeScript
+        run: pnpm run build:ts
+        working-directory: apps/desktop
+
       - name: Build Electron app
-        run: pnpm run build -- --publish=never
+        run: pnpm exec electron-builder --publish=never
         working-directory: apps/desktop
         env:
           DEBUG: electron-builder
@@ -222,7 +225,7 @@ jobs:
           path: |
             apps/desktop/dist/win-unpacked/resources/logs/**
             apps/desktop/dist/windows-installed-logs/**
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
   finalize_release:
     needs:

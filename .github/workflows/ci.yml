@@ -21,8 +21,6 @@ jobs:
     permissions:
       contents: write
 
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,8 +44,12 @@ jobs:
         run: pnpm run lint
         working-directory: apps/desktop
 
+      - name: Build TypeScript
+        run: pnpm run build:ts
+        working-directory: apps/desktop
+
       - name: Build Electron app (no publish)
-        run: pnpm run build -- --publish=never
+        run: pnpm exec electron-builder --publish=never
         working-directory: apps/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,7 +101,7 @@ jobs:
           name: windows-smoke-logs
           path: |
             apps/desktop/dist/win-unpacked/resources/logs/**
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
