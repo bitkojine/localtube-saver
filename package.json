@@ -15,6 +15,6 @@
     ]
   },
   "scripts": {
-    "prepare": "if [ \"$NODE_ENV\" != \"production\" ] && [ \"$CI\" != \"true\" ]; then husky; fi"
+    "prepare": "node -e \"if (process.env.NODE_ENV !== 'production' && process.env.CI !== 'true') { try { (require('husky').default || require('husky'))() } catch (e) { try { require('child_process').execSync('husky', {stdio: 'inherit'}) } catch (e2) {} } }\""
   }
 }
