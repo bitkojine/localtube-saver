@@ -178,6 +178,10 @@ jobs:
           Write-Host "Found installed exe: $($installedExe.FullName)"
 
           Write-Host "Starting smoke test..."
+          # The logs are expected in the 'logs' sub-folder of where the exe is located
+          $smokeLogDir = Join-Path (Split-Path $installedExe.FullName) 'logs'
+          Write-Host "Expected smoke log directory: $smokeLogDir"
+
           $smokeProcess = Start-Process -FilePath $installedExe.FullName -ArgumentList '--smoke-test' -PassThru -NoNewWindow
           if (!$smokeProcess.WaitForExit(60000)) {
             try {
@@ -185,6 +189,16 @@ jobs:
             } catch {
             }
             throw 'Installed app smoke test timed out after 60 seconds'
+          }
+
+          if (Test-Path $smokeLogDir) {
+            Write-Host "Found smoke logs at $smokeLogDir"
+            Get-ChildItem $smokeLogDir -File | ForEach-Object {
+              Write-Host "===== $($_.Name) ====="
+              Get-Content $_.FullName
+            }
+          } else {
+            Write-Host "Warning: Smoke log directory not found at $smokeLogDir"
           }
 
           if ($smokeProcess.ExitCode -ne 0) {
@@ -229,9 +243,16 @@ jobs:
         run: |
           $destination = Join-Path (Resolve-Path dist).Path 'windows-installed-logs'
           New-Item -ItemType Directory -Path $destination -Force | Out-Null
-          $logDirs = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Directory -Filter logs -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like '*resources*' }
-          foreach ($dir in $logDirs) {
-            Copy-Item -Path (Join-Path $dir.FullName '*') -Destination $destination -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Search for logs directory in the Programs install root
+          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs'
+          if (Test-Path $installRoot) {
+            $logDirs = Get-ChildItem $installRoot -Recurse -Directory -Filter logs -ErrorAction SilentlyContinue
+            foreach ($dir in $logDirs) {
+              $destSubDir = Join-Path $destination $dir.Parent.Name
+              New-Item -ItemType Directory -Path $destSubDir -Force | Out-Null
+              Copy-Item -Path (Join-Path $dir.FullName '*') -Destination $destSubDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
           }
 
       - name: Upload Windows smoke logs
@@ -240,7 +261,6 @@ jobs:
         with:
           name: windows-release-smoke-logs
           path: |
-            apps/desktop/dist/win-unpacked/resources/logs/**
             apps/desktop/dist/windows-installed-logs/**
           if-no-files-found: ignore
 
