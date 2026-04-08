@@ -75,7 +75,7 @@ jobs:
             git push origin "$TAG"
           fi
 
-  release:
+  release_build:
     needs: tag
     runs-on: ${{ matrix.os }}
     permissions:
@@ -129,16 +129,114 @@ jobs:
       - name: Install dependencies
         run: pnpm install --filter localtube-desktop
 
-      - name: Build and Publish Electron app
-        run: pnpm run build -- --publish=always
+      - name: Build Electron app
+        run: pnpm run build -- --publish=never
         working-directory: apps/desktop
         env:
           DEBUG: electron-builder
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Smoke test installed Windows app
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $installer = Get-ChildItem dist -Filter 'LocalTube-Saver-Setup-*.exe' | Select-Object -First 1
+          if (!$installer) {
+            throw 'Windows installer not found in dist/'
+          }
+
+          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs'
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -PassThru
+          if (!$installProcess.WaitForExit(120000)) {
+            try {
+              Stop-Process -Id $installProcess.Id -Force
+            } catch {
+            }
+            throw 'Installer timed out after 120 seconds'
+          }
+
+          if ($installProcess.ExitCode -ne 0) {
+            throw "Installer failed with exit code $($installProcess.ExitCode)"
+          }
+
+          $installedExe = Get-ChildItem $installRoot -Recurse -Filter 'LocalTube Saver.exe' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$installedExe) {
+            throw 'Installed LocalTube Saver.exe not found'
+          }
+
+          $smokeProcess = Start-Process -FilePath $installedExe.FullName -ArgumentList '--smoke-test' -PassThru
+          if (!$smokeProcess.WaitForExit(60000)) {
+            try {
+              Stop-Process -Id $smokeProcess.Id -Force
+            } catch {
+            }
+            throw 'Installed app smoke test timed out after 60 seconds'
+          }
+
+          if ($smokeProcess.ExitCode -ne 0) {
+            throw "Installed app smoke test failed with exit code $($smokeProcess.ExitCode)"
+          }
+
+      - name: Upload release assets from macOS
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          TAG="v${{ needs.tag.outputs.new_version }}"
+          files="$(find apps/desktop/dist -maxdepth 1 -type f ! -name 'builder-debug.yml' -print)"
+          if [ -z "$files" ]; then
+            echo "No macOS release assets found"
+            exit 1
+          fi
+          find apps/desktop/dist -maxdepth 1 -type f ! -name 'builder-debug.yml' -print0 | xargs -0 gh release upload "$TAG" --clobber
+
+      - name: Upload release assets from Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $tag = 'v${{ needs.tag.outputs.new_version }}'
+          $files = Get-ChildItem dist -File | Where-Object { $_.Name -ne 'builder-debug.yml' } | Select-Object -ExpandProperty FullName
+          if (!$files -or $files.Count -eq 0) {
+            throw 'No Windows release assets found'
+          }
+          gh release upload $tag $files --clobber
+
+      - name: Collect Windows smoke logs
+        if: matrix.os == 'windows-latest' && failure()
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $destination = Join-Path (Resolve-Path dist).Path 'windows-installed-logs'
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          $logDirs = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Directory -Filter logs -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like '*resources*' }
+          foreach ($dir in $logDirs) {
+            Copy-Item -Path (Join-Path $dir.FullName '*') -Destination $destination -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload Windows smoke logs
+        if: matrix.os == 'windows-latest' && failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-smoke-logs
+          path: |
+            apps/desktop/dist/win-unpacked/resources/logs/**
+            apps/desktop/dist/windows-installed-logs/**
+          if-no-files-found: warn
+
+  finalize_release:
+    needs:
+      - tag
+      - release_build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Finalize Release
         shell: bash
         run: |
           TAG="v${{ needs.tag.outputs.new_version }}"
           echo "Publishing release $TAG"
           gh release edit "$TAG" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

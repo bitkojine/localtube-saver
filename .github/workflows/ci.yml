@@ -54,6 +54,38 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           DEBUG: electron-builder
 
+      - name: Smoke test packaged Windows app
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $exePath = Join-Path (Resolve-Path dist/win-unpacked).Path 'LocalTube Saver.exe'
+          if (!(Test-Path $exePath)) {
+            throw "Smoke test executable not found at $exePath"
+          }
+
+          $process = Start-Process -FilePath $exePath -ArgumentList '--smoke-test' -PassThru
+          if (!$process.WaitForExit(60000)) {
+            try {
+              Stop-Process -Id $process.Id -Force
+            } catch {
+            }
+            throw "Smoke test timed out after 60 seconds"
+          }
+
+          if ($process.ExitCode -ne 0) {
+            throw "Smoke test failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Upload Windows smoke logs
+        if: matrix.os == 'windows-latest' && failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-logs
+          path: |
+            apps/desktop/dist/win-unpacked/resources/logs/**
+          if-no-files-found: warn
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -23,7 +23,9 @@ import strings from './src/strings';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import { setToolDir, ensureTools } from './src/tools';
-import { Server } from 'http';
+import { Server, get as httpGet } from 'http';
+import * as os from 'os';
+import { Buffer } from 'buffer';
 
 interface DownloadItem {
   id: string;
@@ -63,6 +65,62 @@ process.on('unhandledRejection', (reason, promise) => {
 const queue = new TaskQueue();
 const downloads = new Map<string, DownloadItem>();
 let mainWindow: BrowserWindow | null = null;
+const isSmokeTest = process.argv.includes('--smoke-test');
+
+function readSmokeResponse(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const request = httpGet(url, (response) => {
+      if ((response.statusCode || 500) >= 400) {
+        reject(new Error(`SMOKE_HTTP_${response.statusCode || 500}`));
+        response.resume();
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer | string) => {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      });
+      response.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+      response.on('error', reject);
+    });
+
+    request.on('error', reject);
+  });
+}
+
+async function runSmokeTest(): Promise<void> {
+  const tempFilePath = path.join(os.tmpdir(), `localtube-smoke-${process.pid}.mp4`);
+  let server: Server | null = null;
+
+  try {
+    logging.cleanupOldLogs();
+    logging.info('Smoke test starting');
+    fs.writeFileSync(tempFilePath, Buffer.from('localtube smoke test'));
+    const transfer = await createTransferServer(tempFilePath);
+    server = transfer.server;
+    const url = `http://127.0.0.1:${transfer.port}/transfer?token=${transfer.token}&download=1`;
+    logging.info(`Smoke test requesting ${url}`);
+    const bytes = await readSmokeResponse(url);
+    if (bytes.length === 0) {
+      throw new Error('SMOKE_EMPTY_RESPONSE');
+    }
+    logging.info(`Smoke test succeeded with ${bytes.length} bytes`);
+    closeTransferServer(server);
+    fs.unlinkSync(tempFilePath);
+    app.exit(0);
+  } catch (error: unknown) {
+    logging.error('Smoke test failed', error);
+    if (server) {
+      closeTransferServer(server);
+    }
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+    app.exit(1);
+  }
+}
 
 function sendUpdate(id: string): void {
   if (!mainWindow) return;
@@ -216,6 +274,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  if (isSmokeTest) {
+    void runSmokeTest();
+    return;
+  }
+
   setToolDir(path.join(app.getPath('userData'), 'bin'));
   ensureTools()
     .catch((error: Error) => {
