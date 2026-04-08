@@ -1,21 +1,17 @@
 {
   "name": "localtube-saver-root",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "description": "LocalTube Saver monorepo root",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "ffmpeg-static",
-      "electron-winstaller"
-    ]
-  },
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0"
   },
   "lint-staged": {
     "apps/desktop/**/*.{ts,js}": [
-      "pnpm -F localtube-desktop run lint"
+      "npm run lint -w localtube-desktop"
     ]
   },
   "scripts": {

@@ -31,25 +31,25 @@
 
 ### For Developers
 
-**Prerequisites:** [Node.js](https://nodejs.org/) 20+ and [pnpm](https://pnpm.io/) installed.
+**Prerequisites:** [Node.js](https://nodejs.org/) 20+ installed.
 
 1. **Clone & Install:**
    ```bash
    git clone https://github.com/bitkojine/localtube-saver.git
    cd localtube-saver
-   pnpm install
+   npm install
    ```
 2. **Development:** Start the app in watch mode (TypeScript build + Electron).
    ```bash
-   pnpm -F localtube-desktop start
+   npm start -w localtube-desktop
    ```
 3. **Build Installers:**
    ```bash
    # Build for current OS
-   pnpm -F localtube-desktop build
+   npm run build -w localtube-desktop
 
    # Build for both Windows and macOS (macOS required for DMG)
-   pnpm -F localtube-desktop build -- -wm
+   npm run build -w localtube-desktop -- -wm
    ```
 
 ---

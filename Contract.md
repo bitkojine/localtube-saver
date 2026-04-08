@@ -363,7 +363,7 @@ When in doubt:
 ---
 
 ## 19. Final Acceptance Criteria (Addition)
-- The repository MUST pass `pnpm run lint` without any "Comments are not allowed" errors.
+- The repository MUST pass `npm run lint` without any "Comments are not allowed" errors.
 
 System is complete only if:
 

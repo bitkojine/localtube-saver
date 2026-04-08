@@ -10,10 +10,10 @@
     "url": "https://github.com/bitkojine/localtube-saver.git"
   },
   "scripts": {
-    "start": "pnpm run build:ts && electron .",
+    "start": "npm run build:ts && electron .",
     "build:ts": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
     "lint": "eslint .",
-    "build": "pnpm run build:ts && electron-builder --publish=never"
+    "build": "npm run build:ts && electron-builder --publish=never"
   },
   "build": {
     "appId": "com.localtube.saver",

@@ -113,27 +113,21 @@ jobs:
           echo "GITHUB_REF is $GITHUB_REF"
           git log -1 --format=%s
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'pnpm'
-          cache-dependency-path: 'pnpm-lock.yaml'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --filter localtube-desktop
+        run: npm install -w localtube-desktop
 
       - name: Build TypeScript
-        run: pnpm run build:ts
+        run: npm run build:ts
         working-directory: apps/desktop
 
       - name: Build Electron app
-        run: pnpm exec electron-builder --publish=never
+        run: npx electron-builder --publish=never
         working-directory: apps/desktop
         env:
           DEBUG: electron-builder

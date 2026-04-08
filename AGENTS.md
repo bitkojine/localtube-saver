@@ -38,8 +38,8 @@ Always architect to avoid race conditions:
 
 #### 🛠️ Build & Development
 
-*   **Commands:** Always use `pnpm` from the root or within `apps/desktop`.
-*   **TS Compilation:** `pnpm run build:ts` in `apps/desktop` runs two compilers sequentially. Ensure both pass before submitting changes.
+*   **Commands:** Always use `npm` from the root or within `apps/desktop`.
+*   **TS Compilation:** `npm run build:ts` in `apps/desktop` runs two compilers sequentially. Ensure both pass before submitting changes.
 *   **Cleaning:** If weird module errors occur, run `rm -rf apps/desktop/dist-tsc` and rebuild.
 
 #### 📂 File Naming
@@ -62,12 +62,12 @@ The project uses a centralized, file-based logging system that bridges both proc
 
 3.  **Debugging Workflow:**
     *   If a feature (like the QR code button) fails silently or behaves unexpectedly, first add `INFO` or `DEBUG` logs at key entry points and `ERROR` logs in catch blocks.
-    *   Rebuild and run the app locally: `pnpm run build:ts && cd apps/desktop && ./node_modules/.bin/electron .`.
+    *   Rebuild and run the app locally: `npm run build:ts && cd apps/desktop && ./node_modules/.bin/electron .`.
     *   Monitor the latest log file in `apps/desktop/dist-tsc/logs/` using `tail -f` to identify the root cause (e.g., `TypeError`, network timeout, or IPC mismatch).
 
 #### 🧪 Testing
 
-*   Always run `pnpm run lint` before committing.
+*   Always run `npm run lint` before committing.
 *   If you modify the download or storage logic, create a temporary reproduction script to verify the fix and then delete it.
 
 #### 🚀 CI/CD & Release Pipeline
