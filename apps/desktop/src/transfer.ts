@@ -17,7 +17,7 @@ function createToken(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-export async function createTransferServer(filePath: string): Promise<TransferInfo> {
+export async function createTransferServer(filePath: string, bindHost = TRANSFER_BIND_HOST): Promise<TransferInfo> {
   const stats = fs.statSync(filePath);
   if (stats.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('FILE_TOO_LARGE');
@@ -121,7 +121,7 @@ export async function createTransferServer(filePath: string): Promise<TransferIn
   });
 
   const server = await new Promise<Server>((resolve, reject) => {
-    const listener = app.listen(0, TRANSFER_BIND_HOST, () => resolve(listener));
+    const listener = app.listen(0, bindHost, () => resolve(listener));
     listener.on('error', (err: Error) => {
       writeLog(`server listen error: ${err.message}`);
       reject(err);

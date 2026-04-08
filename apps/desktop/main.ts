@@ -66,11 +66,17 @@ const queue = new TaskQueue();
 const downloads = new Map<string, DownloadItem>();
 let mainWindow: BrowserWindow | null = null;
 const isSmokeTest = process.argv.includes('--smoke-test');
+const SMOKE_TEST_REQUEST_TIMEOUT_MS = 15_000;
 
 function readSmokeResponse(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('SMOKE_REQUEST_TIMEOUT'));
+    }, SMOKE_TEST_REQUEST_TIMEOUT_MS);
+
     const request = httpGet(url, (response) => {
       if ((response.statusCode || 500) >= 400) {
+        clearTimeout(timeout);
         reject(new Error(`SMOKE_HTTP_${response.statusCode || 500}`));
         response.resume();
         return;
@@ -81,12 +87,22 @@ function readSmokeResponse(url: string): Promise<Buffer> {
         chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
       });
       response.on('end', () => {
+        clearTimeout(timeout);
         resolve(Buffer.concat(chunks));
       });
-      response.on('error', reject);
+      response.on('error', (error: Error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
 
-    request.on('error', reject);
+    request.on('error', (error: Error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    request.setTimeout(SMOKE_TEST_REQUEST_TIMEOUT_MS, () => {
+      request.destroy(new Error('SMOKE_REQUEST_TIMEOUT'));
+    });
   });
 }
 
@@ -98,11 +114,14 @@ async function runSmokeTest(): Promise<void> {
     logging.cleanupOldLogs();
     logging.info('Smoke test starting');
     fs.writeFileSync(tempFilePath, Buffer.from('localtube smoke test'));
-    const transfer = await createTransferServer(tempFilePath);
+    logging.info(`Smoke test temp file created at ${tempFilePath}`);
+    const transfer = await createTransferServer(tempFilePath, '127.0.0.1');
     server = transfer.server;
+    logging.info(`Smoke test server listening on port ${transfer.port}`);
     const url = `http://127.0.0.1:${transfer.port}/transfer?token=${transfer.token}&download=1`;
     logging.info(`Smoke test requesting ${url}`);
     const bytes = await readSmokeResponse(url);
+    logging.info(`Smoke test received ${bytes.length} bytes`);
     if (bytes.length === 0) {
       throw new Error('SMOKE_EMPTY_RESPONSE');
     }

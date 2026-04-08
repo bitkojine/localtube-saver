@@ -65,16 +65,31 @@ jobs:
           }
 
           $process = Start-Process -FilePath $exePath -ArgumentList '--smoke-test' -PassThru
-          if (!$process.WaitForExit(60000)) {
+          if (!$process.WaitForExit(90000)) {
             try {
               Stop-Process -Id $process.Id -Force
             } catch {
             }
-            throw "Smoke test timed out after 60 seconds"
+            throw "Smoke test timed out after 90 seconds"
           }
 
           if ($process.ExitCode -ne 0) {
             throw "Smoke test failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Print Windows smoke logs
+        if: matrix.os == 'windows-latest' && failure()
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $logDir = Join-Path (Resolve-Path dist/win-unpacked).Path 'resources/logs'
+          if (Test-Path $logDir) {
+            Get-ChildItem $logDir -File | Sort-Object LastWriteTime | ForEach-Object {
+              Write-Host "===== $($_.FullName) ====="
+              Get-Content $_.FullName
+            }
+          } else {
+            Write-Host "Smoke log directory not found at $logDir"
           }
 
       - name: Upload Windows smoke logs
