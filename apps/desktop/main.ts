@@ -112,25 +112,38 @@ async function runSmokeTest(): Promise<void> {
 
   try {
     logging.cleanupOldLogs();
-    logging.info('Smoke test starting');
+    const logInfo = (msg: string) => {
+      logging.info(msg);
+      process.stdout.write(`[SMOKE-INFO] ${msg}\n`);
+    };
+    const logError = (msg: string, err?: unknown) => {
+      logging.error(msg, err);
+      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? JSON.stringify(err) : ''}\n`);
+    };
+
+    logInfo('Smoke test starting');
     fs.writeFileSync(tempFilePath, Buffer.from('localtube smoke test'));
-    logging.info(`Smoke test temp file created at ${tempFilePath}`);
+    logInfo(`Smoke test temp file created at ${tempFilePath}`);
     const transfer = await createTransferServer(tempFilePath, '127.0.0.1');
     server = transfer.server;
-    logging.info(`Smoke test server listening on port ${transfer.port}`);
+    logInfo(`Smoke test server listening on port ${transfer.port}`);
     const url = `http://127.0.0.1:${transfer.port}/transfer?token=${transfer.token}&download=1`;
-    logging.info(`Smoke test requesting ${url}`);
+    logInfo(`Smoke test requesting ${url}`);
     const bytes = await readSmokeResponse(url);
-    logging.info(`Smoke test received ${bytes.length} bytes`);
+    logInfo(`Smoke test received ${bytes.length} bytes`);
     if (bytes.length === 0) {
       throw new Error('SMOKE_EMPTY_RESPONSE');
     }
-    logging.info(`Smoke test succeeded with ${bytes.length} bytes`);
+    logInfo(`Smoke test succeeded with ${bytes.length} bytes`);
     closeTransferServer(server);
     fs.unlinkSync(tempFilePath);
     app.exit(0);
   } catch (error: unknown) {
-    logging.error('Smoke test failed', error);
+    const logError = (msg: string, err?: unknown) => {
+      logging.error(msg, err);
+      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? JSON.stringify(err) : ''}\n`);
+    };
+    logError('Smoke test failed', error);
     if (server) {
       closeTransferServer(server);
     }
