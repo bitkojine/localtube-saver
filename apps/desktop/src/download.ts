@@ -31,15 +31,18 @@ export interface DownloadResult {
 }
 
 function getExtractorArgs(): string {
-  let args = 'youtube:player-client=ios,mweb,web;player-skip=webpage,configs';
+  let args = 'youtube:player-client=ios,mweb,web;player-skip=configs';
   const tokens: string[] = [];
   if (YOUTUBE_PO_TOKEN) {
     tokens.push(`ios.gvs+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`ios.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`ios+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`mweb.gvs+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`mweb.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`mweb+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`web+${YOUTUBE_PO_TOKEN}`);
   }
   if (tokens.length > 0) {
     args += `;po_token=${tokens.join(',')}`;
@@ -62,7 +65,7 @@ export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo>
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      `node,${process.execPath}`
+      `node:${process.execPath},node`
     ];
     if (useCookies && COOKIES_FROM_BROWSER && !cookieExtractionFailed) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
@@ -156,7 +159,7 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      `node,${process.execPath}`,
+      `node:${process.execPath},node`,
       '--ffmpeg-location',
       getFfmpegPath()
     ];
