@@ -31,13 +31,15 @@ export interface DownloadResult {
 }
 
 function getExtractorArgs(): string {
-  let args = 'youtube:player-client=mweb,web;player-skip=webpage,configs';
+  let args = 'youtube:player-client=ios,mweb,web;player-skip=webpage,configs';
   const tokens: string[] = [];
   if (YOUTUBE_PO_TOKEN) {
-    tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`ios.gvs+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`ios.player+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`mweb.gvs+${YOUTUBE_PO_TOKEN}`);
     tokens.push(`mweb.player+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
+    tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
   }
   if (tokens.length > 0) {
     args += `;po_token=${tokens.join(',')}`;
@@ -60,7 +62,7 @@ export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo>
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      'node'
+      `node,${process.execPath}`
     ];
     if (useCookies && COOKIES_FROM_BROWSER && !cookieExtractionFailed) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
@@ -70,7 +72,8 @@ export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo>
     logging.info(`[Pipeline] Getting video info for: ${url} (useCookies: ${useCookies})`);
     logging.debug(`[Pipeline] Executing: ${ytDlpPath} ${args.join(' ')}`);
 
-    const proc = spawn(ytDlpPath, args);
+    const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    const proc = spawn(ytDlpPath, args, { env });
     let stdout = '';
     let stderr = '';
 
@@ -153,7 +156,7 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      'node',
+      `node,${process.execPath}`,
       '--ffmpeg-location',
       getFfmpegPath()
     ];
@@ -162,7 +165,8 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     }
     args.push(url);
 
-    const proc = spawn(getYtDlpPath(), args);
+    const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    const proc = spawn(getYtDlpPath(), args, { env });
     logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')} (useCookies: ${useCookies})`);
     let stderr = '';
     let lastProgressAt = Date.now();

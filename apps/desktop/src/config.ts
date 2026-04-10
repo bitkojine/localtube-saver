@@ -31,5 +31,5 @@ export const MAX_CONCURRENT_DOWNLOADS = 2;
 export const COOKIES_FROM_BROWSER = 'chrome';
 
 
-export const YOUTUBE_PO_TOKEN = '';
-export const YOUTUBE_VISITOR_DATA = '';
+export const YOUTUBE_PO_TOKEN = process.env.YOUTUBE_PO_TOKEN || '';
+export const YOUTUBE_VISITOR_DATA = process.env.YOUTUBE_VISITOR_DATA || '';
