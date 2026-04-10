@@ -17,7 +17,7 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
       '-of', 'json',
       filePath
     ];
-    const proc = spawn(getFfprobePath(), args);
+    const proc = spawn(getFfprobePath(), args, { windowsHide: true });
     let stdout = '';
     let stderr = '';
 
@@ -72,7 +72,7 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
       outputPath
     ];
 
-    const proc = spawn(getFfmpegPath(), args);
+    const proc = spawn(getFfmpegPath(), args, { windowsHide: true });
     let stderr = '';
     let lastProgressAt = Date.now();
     const timeout = setInterval(() => {

@@ -31,26 +31,20 @@ export interface DownloadResult {
 }
 
 function getExtractorArgs(): string {
+  const escape = (s: string) => s.replace(/;/g, '\\;').replace(/=/g, '\\=');
   let args = 'youtube:player-client=ios,mweb,web;player-skip=configs';
-  const tokens: string[] = [];
   if (YOUTUBE_PO_TOKEN) {
-    tokens.push(`ios.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`ios.player+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`ios+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`mweb.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`mweb.player+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`mweb+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`web+${YOUTUBE_PO_TOKEN}`);
-  }
-  if (tokens.length > 0) {
-    args += `;po_token=${tokens.join(',')}`;
+    args += `;po_token=${escape(YOUTUBE_PO_TOKEN)}`;
   }
   if (YOUTUBE_VISITOR_DATA) {
-    args += `;visitor_data=${YOUTUBE_VISITOR_DATA}`;
+    args += `;visitor_data=${escape(YOUTUBE_VISITOR_DATA)}`;
   }
   return args;
+}
+
+function getJsRuntimesArg(): string {
+  const p = process.platform === 'win32' ? process.execPath.replace(/\\/g, '/') : process.execPath;
+  return `node:${p},node`;
 }
 
 export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo> {
@@ -65,7 +59,7 @@ export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo>
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      `node:${process.execPath},node`
+      getJsRuntimesArg()
     ];
     if (useCookies && COOKIES_FROM_BROWSER && !cookieExtractionFailed) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
@@ -76,7 +70,7 @@ export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo>
     logging.debug(`[Pipeline] Executing: ${ytDlpPath} ${args.join(' ')}`);
 
     const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
-    const proc = spawn(ytDlpPath, args, { env });
+    const proc = spawn(ytDlpPath, args, { env, windowsHide: true });
     let stdout = '';
     let stderr = '';
 
@@ -159,7 +153,7 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       '--extractor-args',
       getExtractorArgs(),
       '--js-runtimes',
-      `node:${process.execPath},node`,
+      getJsRuntimesArg(),
       '--ffmpeg-location',
       getFfmpegPath()
     ];
@@ -169,7 +163,7 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     args.push(url);
 
     const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
-    const proc = spawn(getYtDlpPath(), args, { env });
+    const proc = spawn(getYtDlpPath(), args, { env, windowsHide: true });
     logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')} (useCookies: ${useCookies})`);
     let stderr = '';
     let lastProgressAt = Date.now();
