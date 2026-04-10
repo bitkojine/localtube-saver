@@ -15,6 +15,8 @@ import {
 import * as logging from './logging';
 import { getYtDlpPath, getFfmpegPath } from './tools';
 
+let cookieExtractionFailed = false;
+
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 export interface VideoInfo {
@@ -46,7 +48,7 @@ function getExtractorArgs(): string {
   return args;
 }
 
-export function getVideoInfo(url: string): Promise<VideoInfo> {
+export function getVideoInfo(url: string, useCookies = true): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
     const ytDlpPath = getYtDlpPath();
     const args = [
@@ -60,12 +62,12 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
       '--js-runtimes',
       'node'
     ];
-    if (COOKIES_FROM_BROWSER) {
+    if (useCookies && COOKIES_FROM_BROWSER && !cookieExtractionFailed) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
     }
     args.push(url);
 
-    logging.info(`[Pipeline] Getting video info for: ${url}`);
+    logging.info(`[Pipeline] Getting video info for: ${url} (useCookies: ${useCookies})`);
     logging.debug(`[Pipeline] Executing: ${ytDlpPath} ${args.join(' ')}`);
 
     const proc = spawn(ytDlpPath, args);
@@ -82,8 +84,16 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
 
     proc.on('close', (code) => {
       if (code !== 0) {
+        const errorType = classifyError(stderr);
+        if (useCookies && errorType === 'COOKIE_ERROR' && !cookieExtractionFailed) {
+          cookieExtractionFailed = true;
+          logging.warn(`[Pipeline] Cookie extraction failed, retrying without cookies: ${url}`);
+          getVideoInfo(url, false).then(resolve).catch(reject);
+          return;
+        }
+
         logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, { stderr });
-        reject({ type: 'INFO_ERROR', code, stderr });
+        reject({ type: errorType, code, stderr });
         return;
       }
 
@@ -112,6 +122,11 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
 
 function classifyError(stderrText: string): string {
   const text = stderrText.toLowerCase();
+  if ((text.includes('could not copy') && text.includes('cookie database')) ||
+      text.includes('failed to decrypt') ||
+      text.includes('dpapi')) {
+    return 'COOKIE_ERROR';
+  }
   if (text.includes('requested format is not available') || text.includes('format not available')) {
     return 'FORMAT_ERROR';
   }
@@ -121,7 +136,7 @@ function classifyError(stderrText: string): string {
   return 'EXTRACTION_ERROR';
 }
 
-function spawnDownload(url: string, format: string, tempPath: string, onProgress: (percent: number) => void): Promise<void> {
+function spawnDownload(url: string, format: string, tempPath: string, onProgress: (percent: number) => void, useCookies = true): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = [
       '--no-playlist',
@@ -142,13 +157,13 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       '--ffmpeg-location',
       getFfmpegPath()
     ];
-    if (COOKIES_FROM_BROWSER) {
+    if (useCookies && COOKIES_FROM_BROWSER && !cookieExtractionFailed) {
       args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
     }
     args.push(url);
 
     const proc = spawn(getYtDlpPath(), args);
-    logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')}`);
+    logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')} (useCookies: ${useCookies})`);
     let stderr = '';
     let lastProgressAt = Date.now();
     let lastPercent = 0;
@@ -210,15 +225,27 @@ export async function downloadVideo(url: string, onProgress: (percent: number) =
   let attempt = 0;
   while (attempt <= DOWNLOAD_RETRIES) {
     try {
-      await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress);
+      await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress, !cookieExtractionFailed);
       return { info, tempPath };
     } catch (error: unknown) {
       const err = error as { type?: string };
+      if (err.type === 'COOKIE_ERROR' && !cookieExtractionFailed) {
+        cookieExtractionFailed = true;
+        logging.warn(`[Pipeline] Cookie extraction failed during download, retrying without cookies: ${url}`);
+        continue;
+      }
+
       if (err.type === 'FORMAT_ERROR') {
         try {
-          await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress);
+          await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress, !cookieExtractionFailed);
           return { info, tempPath };
-        } catch (fallbackError) {
+        } catch (fallbackError: unknown) {
+          const fallbackErr = fallbackError as { type?: string };
+          if (fallbackErr.type === 'COOKIE_ERROR' && !cookieExtractionFailed) {
+            cookieExtractionFailed = true;
+            logging.warn(`[Pipeline] Cookie extraction failed during fallback download, retrying without cookies: ${url}`);
+            continue;
+          }
           attempt += 1;
           if (attempt > DOWNLOAD_RETRIES) {
             throw fallbackError;
