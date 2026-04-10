@@ -75,6 +75,11 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
     proc.stdout.on('data', (data) => (stdout += data.toString()));
     proc.stderr.on('data', (data) => (stderr += data.toString()));
 
+    proc.on('error', (err) => {
+      logging.error(`[Pipeline] yt-dlp info spawn error: ${err.message}`, err);
+      reject({ type: 'INFO_ERROR', message: err.message, stderr: `Spawn error: ${err.message}` });
+    });
+
     proc.on('close', (code) => {
       if (code !== 0) {
         logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, { stderr });
@@ -147,6 +152,12 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     let stderr = '';
     let lastProgressAt = Date.now();
     let lastPercent = 0;
+
+    proc.on('error', (err) => {
+      logging.error(`[Pipeline] yt-dlp download spawn error: ${err.message}`, err);
+      reject({ type: 'NETWORK_ERROR', message: err.message, stderr: `Spawn error: ${err.message}` });
+    });
+
     const timeout = setInterval(() => {
       if (Date.now() - lastProgressAt > DOWNLOAD_NO_PROGRESS_TIMEOUT_MS) {
         proc.kill('SIGKILL');

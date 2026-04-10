@@ -109,6 +109,34 @@ body {
   font-weight: 600;
 }
 
+.error-details {
+  font-family: monospace;
+  font-size: 11px;
+  background: #fff0f0;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #e0d0d0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.copy-error {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid #d4d4cf;
+  background: #fff;
+  cursor: pointer;
+}
+
+.copy-error:hover {
+  background: #f8f8f5;
+}
+
 .link {
   font-size: 14px;
   color: #1a1a1a;

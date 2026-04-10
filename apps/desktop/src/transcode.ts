@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { TRANSCODE_NO_PROGRESS_TIMEOUT_MS } from './config';
-import { info as writeLog } from './logging';
+import * as logging from './logging';
 import { getFfmpegPath, getFfprobePath } from './tools';
 
 interface ProbeResult {
@@ -28,10 +28,15 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
       stderr += data.toString();
     });
 
+    proc.on('error', (err) => {
+      logging.error(`[Transcode] ffprobe spawn error: ${err.message}`, err);
+      reject({ type: 'PROBE_ERROR', message: err.message, stderr: `Spawn error: ${err.message}` });
+    });
+
     proc.on('close', (code) => {
       if (code !== 0) {
-        writeLog(`ffprobe error: ${stderr.trim()}`);
-        reject(new Error('PROBE_FAILED'));
+        logging.error(`[Transcode] ffprobe failed (code ${code})`, { stderr });
+        reject({ type: 'PROBE_ERROR', code, stderr });
         return;
       }
 
@@ -90,13 +95,18 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
       }
     });
 
+    proc.on('error', (err) => {
+      logging.error(`[Transcode] ffmpeg spawn error: ${err.message}`, err);
+      reject({ type: 'TRANSCODE_ERROR', message: err.message, stderr: `Spawn error: ${err.message}` });
+    });
+
     proc.on('close', (code) => {
       clearInterval(timeout);
       if (code === 0) {
         resolve();
       } else {
-        writeLog(`ffmpeg error: ${stderr.trim()}`);
-        reject(new Error('TRANSCODE_FAILED'));
+        logging.error(`[Transcode] ffmpeg failed (code ${code})`, { stderr });
+        reject({ type: 'TRANSCODE_ERROR', code, stderr });
       }
     });
   });

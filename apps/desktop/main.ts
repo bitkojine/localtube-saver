@@ -22,7 +22,7 @@ import { OUTPUT_DIR, PROGRESS_UPDATE_MIN_MS } from './src/config';
 import strings from './src/strings';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
-import { setToolDir, ensureTools } from './src/tools';
+import { setToolDir, ensureTools, getYtDlpPath, getFfmpegPath } from './src/tools';
 import { Server, get as httpGet } from 'http';
 import * as os from 'os';
 import { Buffer } from 'buffer';
@@ -34,6 +34,7 @@ interface DownloadItem {
   status: string;
   progress: number;
   error: string | null;
+  errorDetails: string | null;
   outputPath: string | null;
   tempPath?: string;
   transfer: {
@@ -166,6 +167,7 @@ function sendUpdate(id: string): void {
     status: item.status,
     progress: item.progress,
     error: item.error,
+    errorDetails: item.errorDetails,
     outputPath: item.outputPath,
     transfer: item.transfer ? {
       url: item.transfer.url,
@@ -188,6 +190,7 @@ function runPipeline(item: DownloadItem): void {
         item.status = strings.status.readyToSend;
         item.progress = 100;
         item.error = null;
+        item.errorDetails = null;
         sendUpdate(item.id);
         return;
       }
@@ -241,6 +244,7 @@ function runPipeline(item: DownloadItem): void {
       item.status = strings.status.readyToSend;
       item.progress = 100;
       item.error = null;
+      item.errorDetails = null;
       sendUpdate(item.id);
     } catch (error: unknown) {
       logging.error('[Pipeline] Global failure', error);
@@ -275,6 +279,7 @@ function runPipeline(item: DownloadItem): void {
       }
 
       item.error = errorMsg;
+      item.errorDetails = errorTyped.stderr || errorTyped.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
       item.status = strings.status.ready;
       sendUpdate(item.id);
     } finally {
@@ -321,8 +326,10 @@ app.whenReady().then(() => {
   logging.cleanupOldLogs();
   
   logging.info('App starting...');
-  logging.info(`Platform: ${process.platform}, Arch: ${process.arch}`);
+  logging.info(`Platform: ${process.platform}, Arch: ${process.arch}, OS: ${os.type()} ${os.release()}`);
   logging.info(`UserData path: ${app.getPath('userData')}`);
+  logging.info(`Tool path (yt-dlp): ${getYtDlpPath()}`);
+  logging.info(`Tool path (ffmpeg): ${getFfmpegPath()}`);
 
   createWindow();
 
@@ -388,6 +395,7 @@ ipcMain.handle('download-start', async (_event, url: string) => {
     status: strings.status.downloading,
     progress: 0,
     error: null,
+    errorDetails: null,
     outputPath: null,
     transfer: null,
     transferTimer: null
@@ -404,6 +412,7 @@ ipcMain.handle('download-retry', async (_event, id: string) => {
   const item = downloads.get(id);
   if (!item) return;
   item.error = null;
+  item.errorDetails = null;
   item.status = strings.status.downloading;
   item.progress = 0;
   sendUpdate(id);
@@ -443,7 +452,8 @@ ipcMain.handle('transfer-start', async (_event, id: string) => {
     logging.info(`transfer server listening at ${url}`);
     const qr = await QRCode.toDataURL(url);
 
-    item.error = null; 
+    item.error = null;
+    item.errorDetails = null;
     item.transfer = {
       url,
       token: transfer.token,
@@ -530,6 +540,7 @@ ipcMain.handle('transfer-start-by-path', async (_event, filePath: string) => {
       status: strings.status.openOnPhone,
       progress: 100,
       error: null,
+      errorDetails: null,
       outputPath: filePath,
       transfer: {
         url,

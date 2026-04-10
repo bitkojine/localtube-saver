@@ -32,7 +32,8 @@ export default [
         HTMLTemplateElement: "readonly",
         HTMLInputElement: "readonly",
         HTMLButtonElement: "readonly",
-        KeyboardEvent: "readonly"
+        KeyboardEvent: "readonly",
+        navigator: "readonly"
       }
     },
     plugins: {

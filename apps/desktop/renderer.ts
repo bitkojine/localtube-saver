@@ -20,6 +20,7 @@ interface DownloadUpdate {
   status: string;
   progress: number;
   error: string | null;
+  errorDetails: string | null;
   outputPath: string | null;
   transfer: TransferInfo | null;
 }
@@ -304,6 +305,25 @@ function renderItem(data: Partial<DownloadUpdate> & { id: string }): void {
   if (progressEl) progressEl.textContent = typeof data.progress === 'number' ? `${data.progress}%` : '';
   const errorEl = node.querySelector('.error');
   if (errorEl) errorEl.textContent = data.error || '';
+  const errorDetailsEl = node.querySelector('.error-details') as HTMLElement;
+  if (errorDetailsEl) {
+    errorDetailsEl.textContent = data.errorDetails || '';
+    errorDetailsEl.classList.toggle('hidden', !data.errorDetails);
+  }
+
+  const copyBtn = node.querySelector('.copy-error') as HTMLButtonElement;
+  if (copyBtn) {
+    copyBtn.classList.toggle('hidden', !data.errorDetails);
+    if (data.errorDetails) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(`Error: ${data.error}\nDetails: ${data.errorDetails}`);
+        copyBtn.textContent = 'Nukopijuota!';
+        setTimeout(() => (copyBtn.textContent = 'Kopijuoti klaidą'), 2000);
+      };
+    } else {
+      copyBtn.onclick = null;
+    }
+  }
 
   const sendBtn = node.querySelector('.send') as HTMLElement;
   const retryBtn = node.querySelector('.retry') as HTMLElement;
@@ -369,7 +389,9 @@ async function startDownload(): Promise<void> {
       status: '',
       progress: 0,
       error: result.error,
-      outputPath: null
+      errorDetails: null,
+      outputPath: null,
+      transfer: null
     };
     renderItem(errorItem);
   }
