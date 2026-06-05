@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
-import { TRANSCODE_NO_PROGRESS_TIMEOUT_MS } from './config';
-import { info as writeLog } from './logging';
+import { FFPROBE_TIMEOUT_MS, TRANSCODE_NO_PROGRESS_TIMEOUT_MS, TRANSCODE_TOTAL_TIMEOUT_MS } from './config';
+import { info as writeLog, debug, error as writeError } from './logging';
 import { getFfmpegPath, getFfprobePath } from './tools';
 
 interface ProbeResult {
@@ -21,6 +21,11 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
     let stdout = '';
     let stderr = '';
 
+    const timeout = setTimeout(() => {
+      writeError(`ffprobe timed out after ${FFPROBE_TIMEOUT_MS}ms, killing process`);
+      proc.kill('SIGKILL');
+    }, FFPROBE_TIMEOUT_MS);
+
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
     });
@@ -29,6 +34,7 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
     });
 
     proc.on('close', (code) => {
+      clearTimeout(timeout);
       if (code !== 0) {
         writeLog(`ffprobe error: ${stderr.trim()}`);
         reject(new Error('PROBE_FAILED'));
@@ -68,13 +74,25 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
     ];
 
     const proc = spawn(getFfmpegPath(), args);
+    writeLog(`ffmpeg transcoding: ${getFfmpegPath()} ${args.join(' ')}`);
     let stderr = '';
     let lastProgressAt = Date.now();
-    const timeout = setInterval(() => {
+    let killedByStallWatchdog = false;
+    let killedByTotalTimeout = false;
+
+    const stallWatchdog = setInterval(() => {
       if (Date.now() - lastProgressAt > TRANSCODE_NO_PROGRESS_TIMEOUT_MS) {
+        killedByStallWatchdog = true;
+        writeError(`ffmpeg no progress for ${TRANSCODE_NO_PROGRESS_TIMEOUT_MS}ms, killing process`);
         proc.kill('SIGKILL');
       }
     }, 1_000);
+
+    const totalTimeout = setTimeout(() => {
+      killedByTotalTimeout = true;
+      writeError(`ffmpeg total timeout of ${TRANSCODE_TOTAL_TIMEOUT_MS}ms reached, killing process`);
+      proc.kill('SIGKILL');
+    }, TRANSCODE_TOTAL_TIMEOUT_MS);
 
     proc.stderr.on('data', (data) => {
       const line = data.toString();
@@ -86,12 +104,28 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
         const minutes = Number(match[2]);
         const seconds = Number(match[3]);
         const time = hours * 3600 + minutes * 60 + seconds;
+        debug(`[Transcode] progress: ${formatTime(time)}`);
         onProgress(time);
       }
     });
 
     proc.on('close', (code) => {
-      clearInterval(timeout);
+      clearInterval(stallWatchdog);
+      clearTimeout(totalTimeout);
+
+      if (killedByTotalTimeout) {
+        writeError(`ffmpeg timed out after ${TRANSCODE_TOTAL_TIMEOUT_MS}ms`);
+        reject(new Error('TRANSCODE_TIMEOUT'));
+        return;
+      }
+
+      if (killedByStallWatchdog) {
+        writeError(`ffmpeg stalled (no progress for ${TRANSCODE_NO_PROGRESS_TIMEOUT_MS}ms)`);
+        reject(new Error('TRANSCODE_STALLED'));
+        return;
+      }
+
+      writeLog(`ffmpeg finished with code ${code}`);
       if (code === 0) {
         resolve();
       } else {
@@ -100,6 +134,13 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
       }
     });
   });
+}
+
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toFixed(1).padStart(5, '0')}`;
 }
 
 export async function transcodeToMp4(inputPath: string, outputPath: string, onProgress: (time: number, duration: number) => void): Promise<void> {

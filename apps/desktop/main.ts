@@ -259,6 +259,14 @@ function runPipeline(item: DownloadItem): void {
         errorMsg = strings.errors.formatError;
       } else if (errorType === 'EXTRACTION_ERROR') {
         errorMsg = strings.errors.extractionError;
+      } else if (errorType === 'TIMEOUT') {
+        errorMsg = strings.errors.timeoutError;
+      } else if (errorType === 'STALLED') {
+        errorMsg = strings.errors.stalledError;
+      } else if (errorType === 'TRANSCODE_TIMEOUT') {
+        errorMsg = strings.errors.timeoutError;
+      } else if (errorType === 'TRANSCODE_STALLED') {
+        errorMsg = strings.errors.stalledError;
       }
       
       if (errorTyped.stderr) {

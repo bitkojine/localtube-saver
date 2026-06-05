@@ -26,6 +26,8 @@ const strings = {
     networkError: 'Tinklo klaida',
     formatError: 'Nepavyko rasti tinkamo formato',
     extractionError: 'Vaizdo įrašo gavimo klaida (galbūt amžiaus ribojimas?)',
+    timeoutError: 'Atsisiuntimas užtruko per ilgai. Bandykite dar kartą.',
+    stalledError: 'Atsisiuntimas sustojo. Tikrinamas interneto ryšys.',
     unknownError: 'Nežinoma klaida'
   },
   storage: {

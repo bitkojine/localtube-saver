@@ -3,7 +3,7 @@ import * as os from 'os';
 
 const isWindows = process.platform === 'win32';
 const isPackagedApp = __dirname.includes('.asar');
-const LOG_BASE_DIR = isPackagedApp ? process.resourcesPath : path.join(__dirname, '..');
+const LOG_BASE_DIR = isPackagedApp ? process.resourcesPath : path.resolve(__dirname, '..', '..');
 
 export const OUTPUT_DIR = isWindows
   ? path.join(process.env.USERPROFILE || os.homedir(), 'Videos', 'LocalTube')
@@ -21,8 +21,12 @@ export const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 export const DOWNLOAD_FORMAT_PRIMARY = 'bv*[height<=720]+ba/best';
 export const DOWNLOAD_FORMAT_FALLBACK = 'best';
 export const DOWNLOAD_RETRIES = 2;
+export const INFO_TIMEOUT_MS = 30_000;
 export const DOWNLOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
+export const DOWNLOAD_TOTAL_TIMEOUT_MS = 5 * 60_000;
+export const FFPROBE_TIMEOUT_MS = 15_000;
 export const TRANSCODE_NO_PROGRESS_TIMEOUT_MS = 30_000;
+export const TRANSCODE_TOTAL_TIMEOUT_MS = 10 * 60_000;
 export const TRANSFER_NO_DATA_TIMEOUT_MS = 30_000;
 export const TRANSFER_TOKEN_TTL_MS = 10 * 60_000;
 export const TRANSFER_BIND_HOST = '0.0.0.0';

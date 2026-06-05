@@ -6,6 +6,8 @@ import {
   DOWNLOAD_FORMAT_FALLBACK,
   DOWNLOAD_RETRIES,
   DOWNLOAD_NO_PROGRESS_TIMEOUT_MS,
+  DOWNLOAD_TOTAL_TIMEOUT_MS,
+  INFO_TIMEOUT_MS,
   MAX_FILE_SIZE_BYTES,
   TEMP_DIR,
   COOKIES_FROM_BROWSER,
@@ -72,10 +74,16 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
     let stdout = '';
     let stderr = '';
 
+    const timeout = setTimeout(() => {
+      logging.error(`[Pipeline] yt-dlp info timed out after ${INFO_TIMEOUT_MS}ms, killing process`);
+      proc.kill('SIGKILL');
+    }, INFO_TIMEOUT_MS);
+
     proc.stdout.on('data', (data) => (stdout += data.toString()));
     proc.stderr.on('data', (data) => (stderr += data.toString()));
 
     proc.on('close', (code) => {
+      clearTimeout(timeout);
       if (code !== 0) {
         logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, { stderr });
         reject({ type: 'INFO_ERROR', code, stderr });
@@ -147,11 +155,23 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     let stderr = '';
     let lastProgressAt = Date.now();
     let lastPercent = 0;
-    const timeout = setInterval(() => {
+
+    let killedByWatchdog = false;
+    let killedByTotalTimeout = false;
+
+    const noProgressWatchdog = setInterval(() => {
       if (Date.now() - lastProgressAt > DOWNLOAD_NO_PROGRESS_TIMEOUT_MS) {
+        killedByWatchdog = true;
+        logging.error(`No download progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms, killing yt-dlp process`);
         proc.kill('SIGKILL');
       }
     }, 1_000);
+
+    const totalTimeout = setTimeout(() => {
+      killedByTotalTimeout = true;
+      logging.error(`Download total timeout of ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms reached, killing yt-dlp process`);
+      proc.kill('SIGKILL');
+    }, DOWNLOAD_TOTAL_TIMEOUT_MS);
 
     proc.stdout.on('data', (data) => {
       const line = data.toString();
@@ -171,7 +191,21 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     });
 
     proc.on('close', (code) => {
-      clearInterval(timeout);
+      clearInterval(noProgressWatchdog);
+      clearTimeout(totalTimeout);
+
+      if (killedByTotalTimeout) {
+        logging.error(`yt-dlp download timed out after ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms`);
+        reject({ type: 'TIMEOUT', stderr, tempPath });
+        return;
+      }
+
+      if (killedByWatchdog) {
+        logging.error(`yt-dlp download stalled (no progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms)`);
+        reject({ type: 'STALLED', stderr, tempPath });
+        return;
+      }
+
       logging.info(`yt-dlp download finished with code ${code}`);
       if (code === 0) {
         resolve();
