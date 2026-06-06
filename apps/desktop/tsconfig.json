@@ -15,5 +15,5 @@
     "allowJs": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-tsc"]
+  "exclude": ["node_modules", "dist", "dist-tsc", "src/**/*.test.ts"]
 }

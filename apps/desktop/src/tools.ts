@@ -75,6 +75,9 @@ async function downloadFile(url: string, destination: string, deps?: ToolsDeps):
         const file = f.createWriteStream(tempPath);
         try {
           await pipeline(res, file);
+          if (f.existsSync(destination)) {
+            f.unlinkSync(destination);
+          }
           f.renameSync(tempPath, destination);
           resolve();
         } catch (err) {

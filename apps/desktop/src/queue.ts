@@ -30,11 +30,15 @@ export class TaskQueue {
         run: () => {
           Promise.resolve()
             .then(task)
-            .then((result) => resolve(result))
-            .catch((error) => wrappedReject(error instanceof Error ? error : new Error(String(error))))
-            .finally(() => {
+            .then((result) => {
               this.activeCount -= 1;
               this.next();
+              resolve(result);
+            })
+            .catch((error) => {
+              this.activeCount -= 1;
+              this.next();
+              wrappedReject(error instanceof Error ? error : new Error(String(error)));
             });
         }
       });

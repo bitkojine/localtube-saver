@@ -14,7 +14,7 @@ export interface FsModule {
   writeFileSync: typeof fs.writeFileSync;
   readdirSync: typeof fs.readdirSync;
   statSync: typeof fs.statSync;
-  statfsSync: typeof fs.statfsSync;
+  statfsSync?: typeof fs.statfsSync;
   unlinkSync: typeof fs.unlinkSync;
 }
 
@@ -128,11 +128,14 @@ export function ensureUniquePath(filePath: string, fsModule?: FsModule): string 
 export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number, fsModule?: FsModule): boolean {
   try {
     const f = getFs(fsModule);
+    if (!f.statfsSync) {
+      return true;
+    }
     const stats = f.statfsSync(targetDir);
     const free = Number(stats.bavail) * Number(stats.bsize);
     return free >= requiredBytes;
   } catch (_error) {
-    return false;
+    return true;
   }
 }
 

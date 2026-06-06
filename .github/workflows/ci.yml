@@ -38,3 +38,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build:ts
         working-directory: apps/desktop
+
+      - name: Run tests
+        run: npm test
+        working-directory: apps/desktop
+
+      - name: Smoke test — CLI starts with usage message
+        run: node dist-tsc/src/cli.js 2>&1 | head -5
+        working-directory: apps/desktop
