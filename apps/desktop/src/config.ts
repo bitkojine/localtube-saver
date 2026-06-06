@@ -2,8 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 const isWindows = process.platform === 'win32';
-const isPackagedApp = __dirname.includes('.asar');
-const LOG_BASE_DIR = isPackagedApp ? process.resourcesPath : path.resolve(__dirname, '..', '..');
+const LOG_BASE_DIR = path.resolve(__dirname, '..', '..');
 
 export const OUTPUT_DIR = isWindows
   ? path.join(process.env.USERPROFILE || os.homedir(), 'Videos', 'LocalTube')
