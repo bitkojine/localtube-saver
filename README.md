@@ -1,112 +1,106 @@
-# 📺 LocalTube Saver
+# LocalTube Saver
 
-[![Release](https://img.shields.io/github/v/release/bitkojine/localtube-saver?include_prereleases&style=flat-square)](https://github.com/bitkojine/localtube-saver/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+An Electron desktop app that downloads YouTube videos, transcodes them to iPhone-compatible MP4, and lets you grab them over local Wi-Fi via QR code.
 
-**LocalTube Saver** is a powerful, production-grade desktop application designed to download YouTube videos, transcode them into iOS-compatible MP4 files, and seamlessly transfer them to your iPhone via a simple QR code. No cables, no cloud uploads, no hassle.
+## Current Status
 
----
+**Working prototype / late beta.** The core download → transcode → transfer pipeline works end-to-end on macOS. Everything else ranges from incomplete to absent.
 
-## ✨ Key Features
+### What Works
 
-- **🚀 High-Speed Downloads:** Powered by `yt-dlp` with automatic nightly updates and YouTube detection bypass (PO Token support).
-- **🎞️ Native Transcoding:** Built-in `ffmpeg` pipeline ensures every video is perfectly formatted for iOS.
-- **📱 QR Code Transfer:** Instant local network transfer to iPhone—just scan and save to your Photos app.
-- **🖥️ Cross-Platform:** Beautifully crafted for both **macOS** and **Windows**.
-- **🔄 Auto-Updates:** Stay up to date automatically with built-in update checks and notifications.
-- **🛠️ Production Observability:** Detailed pipeline logging and crash reporting for a reliable experience.
+- YouTube video info retrieval via `yt-dlp` (nightly builds, auto-updated daily)
+- Download with progress, stall detection, timeout (720p max, 5 min total timeout)
+- ffmpeg transcode to libx264 + AAC (CRF 30, High profile, fast preset)
+- Local HTTP transfer server with random-token auth
+- QR code generation for the transfer URL
+- File cache (avoids re-downloading the same video ID)
+- Simple Lithuanian UI
+- File-based daily rotating logs (7-day retention)
+- Concurrency-limited task queue (max 2 downloads)
+- Disk space check before download
+- Smoke test mode (`--smoke-test`)
 
----
+### What Doesn't Work / Needs Major Work
 
-## 🚀 Getting Started
+- **No tests.** Zero test files, zero test infrastructure.
+- **YouTube is unstable.** `YOUTUBE_PO_TOKEN` and `YOUTUBE_VISITOR_DATA` in `src/config.ts` are hardcoded to empty strings. Without them, YouTube may return bot-detection or age-restriction errors. There is no environment variable loading, no config UI, no documentation on how to obtain these values. yt-dlp compatibility with YouTube breaks unpredictably.
+- **Windows was never successfully deployed.** Every attempt to run on Windows failed. `storage.ts` uses `fs.statfsSync` (POSIX-only, crashes on Windows). Cookie extraction assumes Chrome. Path separators are inconsistently handled. In retrospect, Electron added complexity far beyond what this project needed — a CLI tool piped through `ffmpeg` + a simple `python -m http.server` would have been more robust, easier to maintain, and actually cross-platform.
+- **Lithuanian-only.** All UI strings are hardcoded in Lithuanian with no i18n system. The renderer (`renderer.ts`) duplicates raw Lithuanian strings because it can't import the main process's `strings.ts` module.
+- **Dead dependencies.** `ee-first` is listed in `package.json` but never imported anywhere.
+- **Stale Go directory.** `apps/desktop-go/` (175MB) contains prebuilt Go/Wails `.app` bundles from an abandoned rewrite attempt. No source files, no build scripts, just compiled binaries and `node_modules`. It's unclear what state they're in or whether they even launch.
+- **Old installer artifact.** `apps/desktop/dist/` (696MB) contains a `LocalTube-Saver-0.4.2.dmg` and `mac-arm64/LocalTube Saver.app` from a previous version. The package.json says v0.4.8. This directory is stale and should be cleaned up.
+- **Memory leak.** The `downloads` map in `main.ts` grows indefinitely — completed/failed items are never removed.
+- **String duplication.** Lithuanian error messages and status strings exist in three places: `strings.ts`, `renderer.ts` (as `STORAGE_STRINGS`), and inline in error-classification code in `main.ts`.
+- **Log location doesn't match contract.** `Contract.md` says logs go to `~/Library/Logs/LocalTube`. In practice they go to `apps/desktop/logs/` (dev) or inside the app bundle (packaged).
+- **No configuration system.** PO tokens must be edited directly in source code. No `.env` loading, no settings UI, no config file.
+- **No CI/CD.** All GitHub releases and tags have been deleted. The release workflow exists but would publish to a repo with no releases.
+- **Transfer server binds to `0.0.0.0`.** The HTTP server is exposed on all network interfaces. Security relies entirely on a 128-bit random token in the URL. No HTTPS, no authentication beyond the token.
+- **Unsafe init.** `renderer.ts` calls `init()` without `await` — if `getVersion()` or `getFiles()` rejects, the error is unhandled.
+- **TS 6.x with hacks.** TypeScript 6.0.2 is very new and the config uses `ignoreDeprecations: "6.0"` to suppress warnings. This is unlikely to work with standard tooling.
+- **No auto-updates.** `electron-updater` is configured but there are no releases to check against. The update notification UI will never fire.
+- **No resumable downloads.** `yt-dlp` is invoked with `--no-part`, so partial downloads are lost on failure and must restart from zero.
 
-### For Users
+## How to Run (macOS)
 
-1. **Download:** Head over to the [Releases](https://github.com/bitkojine/localtube-saver/releases) page.
-2. **Install:** 
-   - **Windows:** Download and run `LocalTube-Saver-Setup-X.X.X.exe`.
-   - **macOS:** Download `LocalTube-Saver-X.X.X.dmg`, open it, and drag to Applications.
-3. **Enjoy:** Paste a YouTube link, wait for it to process, and scan the QR code to send it to your iPhone.
+```bash
+git clone https://github.com/bitkojine/localtube-saver.git
+cd localtube-saver
+npm install
+cd apps/desktop
+npm run build:ts
+npx electron dist-tsc/main.js
+```
 
-### For Developers
+The app opens a window. Paste a YouTube URL and click download. When processing finishes, a QR code appears — scan it from your iPhone on the same Wi-Fi network.
 
-**Prerequisites:** [Node.js](https://nodejs.org/) 20+ installed.
+## Technical Architecture
 
-1. **Clone & Install:**
-   ```bash
-   git clone https://github.com/bitkojine/localtube-saver.git
-   cd localtube-saver
-   npm install
-   ```
-2. **Development:** Start the app in watch mode (TypeScript build + Electron).
-   ```bash
-   npm start -w localtube-desktop
-   ```
-3. **Build Installers:**
-   ```bash
-   # Build for current OS
-   npm run build -w localtube-desktop
+- **Main process** (`main.ts`, `src/`): CommonJS, compiled by `tsconfig.json`. Runs yt-dlp, ffmpeg, Express server.
+- **Renderer** (`renderer.ts`): ESM (`<script type="module">`), compiled by `tsconfig.renderer.json`. Pure browser-side UI.
+- **Preload** (`preload.ts`): Context bridge exposing a typed `LocaltubeAPI` interface via `contextBridge`.
+- **No framework.** Vanilla HTML/CSS/TypeScript renderer. No React, no Vue, no bundler (TypeScript only).
+- **No comments anywhere** enforced by a custom ESLint rule.
+- **Strict type safety** enforced: `no-explicit-any: error`, `no-restricted-types` (bans `unknown`).
 
-   # Build for both Windows and macOS (macOS required for DMG)
-   npm run build -w localtube-desktop -- -wm
-   ```
+### Key Dependencies
 
----
+| Tool | Purpose |
+|------|---------|
+| yt-dlp (nightly) | Video extraction and download |
+| ffmpeg-static | Binary-free ffmpeg bundling |
+| ffprobe-static | Binary-free ffprobe bundling |
+| Express | Local HTTP transfer server |
+| qrcode | QR code generation (data URI) |
+| electron-updater | Auto-update (currently non-functional) |
 
-## 🏗️ Technical Architecture & Module Strategy
+## Project Structure
 
-This application uses a specific dual-module architecture to ensure compatibility between Electron's Node.js environment and the browser-based renderer:
+```
+apps/desktop/
+  main.ts              -- Electron main process
+  preload.ts           -- Context bridge (22 lines)
+  renderer.ts          -- Browser UI (345 lines)
+  index.html           -- App shell (Lithuanian)
+  styles.css           -- All styles (302 lines)
+  src/
+    types.ts           -- Shared interfaces and types
+    AppError.ts        -- Typed error class
+    config.ts          -- Hardcoded configuration
+    download.ts        -- yt-dlp pipeline
+    transcode.ts       -- ffmpeg pipeline
+    transfer.ts        -- Express transfer server
+    storage.ts         -- File management + cache
+    queue.ts           -- Concurrency-limited task queue
+    tools.ts           -- Binary management (yt-dlp update)
+    logging.ts         -- File-based daily logger
+    validation.ts      -- YouTube URL parser
+    util.ts            -- Local IP, throttle
+    strings.ts         -- Lithuanian UI strings
+  dist-tsc/            -- Compiled JS (gitignored)
+  dist/                -- Old installers (stale)
+apps/desktop-go/        -- Abandoned Go/Wails port (stale)
+```
 
-- **Main & Preload Processes (CommonJS):** These run in Node.js and use `module.exports`/`require`. They are compiled from TypeScript using `tsconfig.json`.
-- **Renderer Process (ES Modules):** The UI runs in a browser context and uses standard `import`/`export`. It is compiled using `tsconfig.renderer.json` and loaded in `index.html` via `<script type="module">`.
+## License
 
-**Crucial:** Never mix these strategies. Changing the renderer to CommonJS will break the UI with "exports is not defined" errors. Always refer to `AGENTS.md` before making architectural changes.
-
-- **Frontend:** HTML5/CSS3 with a vanilla TypeScript renderer for maximum performance.
-- **Main Process:** Electron (TypeScript) managing the download/transcode pipeline.
-- **Core Tools:** 
-  - `yt-dlp`: For robust video extraction.
-  - `ffmpeg`: For high-quality MP4 transcoding.
-  - `Express`: Temporary local server for iPhone transfers.
-- **Workflow:** Automated CI/CD using GitHub Actions for testing and multi-platform releases.
-
----
-
-## 🛡️ YouTube Bypass & Stability
-
-This project maintains high reliability by implementing several advanced techniques:
-- **Nightly Tooling:** Automatically manages and updates `yt-dlp` binaries.
-- **PO Token Support:** Configurable `YOUTUBE_PO_TOKEN` and `YOUTUBE_VISITOR_DATA` to handle YouTube's latest security requirements.
-- **Player Spoofing:** Uses the `mweb` and `ios` player clients to ensure stable streams.
-- **Local Caching:** Avoids duplicate downloads by checking for existing files in `~/Movies/LocalTube` (macOS) or `%USERPROFILE%\Videos\LocalTube` (Windows).
-
----
-
-## 📱 How to Save to iPhone
-
-1. **Scan:** Use your iPhone's camera to scan the QR code displayed in the app.
-2. **Open:** Open the link in **Safari**.
-3. **Share:** Tap the **Share** button at the bottom of the screen.
-4. **Save:** Select **"Save Video"** to add it directly to your Photos app.
-*Note: Your iPhone and computer must be on the same Wi-Fi network.*
-
----
-
-## 📂 Project Structure
-
-- `apps/desktop/` — Main Electron application source.
-- `apps/desktop/src/` — Core TypeScript logic (Download, Transcode, Transfer).
-- `AGENTS.md` — Critical coding guidelines for AI agents and human developers.
-- `.github/workflows/` — CI and Release automation.
-- `Contract.md` — Technical specification and source of truth for behavior.
-
----
-
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` (if provided) or the repository for more information.
-
----
-
-*Built with ❤️ by the LocalTube Team.*
+MIT
