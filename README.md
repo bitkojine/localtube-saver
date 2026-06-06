@@ -26,16 +26,16 @@ An Electron desktop app that downloads YouTube videos, transcodes them to iPhone
 - **YouTube is unstable.** `YOUTUBE_PO_TOKEN` and `YOUTUBE_VISITOR_DATA` in `src/config.ts` are hardcoded to empty strings. Without them, YouTube may return bot-detection or age-restriction errors. There is no environment variable loading, no config UI, no documentation on how to obtain these values. yt-dlp compatibility with YouTube breaks unpredictably.
 - **Windows was never successfully deployed.** Every attempt to run on Windows failed. `storage.ts` uses `fs.statfsSync` (POSIX-only, crashes on Windows). Cookie extraction assumes Chrome. Path separators are inconsistently handled. In retrospect, Electron added complexity far beyond what this project needed — a CLI tool piped through `ffmpeg` + a simple `python -m http.server` would have been more robust, easier to maintain, and actually cross-platform.
 - **Lithuanian-only.** All UI strings are hardcoded in Lithuanian with no i18n system. The renderer (`renderer.ts`) duplicates raw Lithuanian strings because it can't import the main process's `strings.ts` module.
-- **Dead dependencies.** `ee-first` is listed in `package.json` but never imported anywhere.
-- **Stale Go directory.** `apps/desktop-go/` (175MB) contains prebuilt Go/Wails `.app` bundles from an abandoned rewrite attempt. No source files, no build scripts, just compiled binaries and `node_modules`. It's unclear what state they're in or whether they even launch.
-- **Old installer artifact.** `apps/desktop/dist/` (696MB) contains a `LocalTube-Saver-0.4.2.dmg` and `mac-arm64/LocalTube Saver.app` from a previous version. The package.json says v0.4.8. This directory is stale and should be cleaned up.
+- ~~**Dead dependencies.** `ee-first` is listed in `package.json` but never imported anywhere.~~
+- ~~**Stale Go directory.** `apps/desktop-go/` (175MB) contains prebuilt Go/Wails `.app` bundles from an abandoned rewrite attempt. No source files, no build scripts, just compiled binaries and `node_modules`. It's unclear what state they're in or whether they even launch.~~
+- ~~**Old installer artifact.** `apps/desktop/dist/` (696MB) contains a `LocalTube-Saver-0.4.2.dmg` and `mac-arm64/LocalTube Saver.app` from a previous version. The package.json says v0.4.8. This directory is stale and should be cleaned up.~~
 - **Memory leak.** The `downloads` map in `main.ts` grows indefinitely — completed/failed items are never removed.
 - **String duplication.** Lithuanian error messages and status strings exist in three places: `strings.ts`, `renderer.ts` (as `STORAGE_STRINGS`), and inline in error-classification code in `main.ts`.
 - **Log location doesn't match contract.** `Contract.md` says logs go to `~/Library/Logs/LocalTube`. In practice they go to `apps/desktop/logs/` (dev) or inside the app bundle (packaged).
 - **No configuration system.** PO tokens must be edited directly in source code. No `.env` loading, no settings UI, no config file.
 - **No CI/CD.** All GitHub releases and tags have been deleted. The release workflow exists but would publish to a repo with no releases.
 - **Transfer server binds to `0.0.0.0`.** The HTTP server is exposed on all network interfaces. Security relies entirely on a 128-bit random token in the URL. No HTTPS, no authentication beyond the token.
-- **Unsafe init.** `renderer.ts` calls `init()` without `await` — if `getVersion()` or `getFiles()` rejects, the error is unhandled.
+- ~~**Unsafe init.** `renderer.ts` calls `init()` without `await` — if `getVersion()` or `getFiles()` rejects, the error is unhandled.~~
 - **TS 6.x with hacks.** TypeScript 6.0.2 is very new and the config uses `ignoreDeprecations: "6.0"` to suppress warnings. This is unlikely to work with standard tooling.
 - **No auto-updates.** `electron-updater` is configured but there are no releases to check against. The update notification UI will never fire.
 - **No resumable downloads.** `yt-dlp` is invoked with `--no-part`, so partial downloads are lost on failure and must restart from zero.
@@ -97,8 +97,6 @@ apps/desktop/
     util.ts            -- Local IP, throttle
     strings.ts         -- Lithuanian UI strings
   dist-tsc/            -- Compiled JS (gitignored)
-  dist/                -- Old installers (stale)
-apps/desktop-go/        -- Abandoned Go/Wails port (stale)
 ```
 
 ## License

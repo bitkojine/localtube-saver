@@ -222,7 +222,9 @@ async function init(): Promise<void> {
   await loadStorage();
 }
 
-init();
+init().catch((err) => {
+  window.localtube.log('error', 'Init failed', err instanceof Error ? err.message : String(err));
+});
 
 function renderItem(data: Partial<DownloadUpdate> & { id: string }): void {
   let node = items.get(data.id);
