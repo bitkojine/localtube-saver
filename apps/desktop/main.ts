@@ -3,8 +3,9 @@ import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
 import { extractVideoId } from './src/validation';
 import { TaskQueue } from './src/queue';
-import { getVideoInfo, downloadVideo, cleanupTempFiles, VideoInfo } from './src/download';
+import { getVideoInfo, downloadVideo, cleanupTempFiles, VideoInfo, DownloadDeps } from './src/download';
 import { transcodeToMp4 } from './src/transcode';
+import { runPipelineTask, PipelineDeps } from './src/pipeline';
 import {
   buildOutputPath,
   ensureUniquePath,
@@ -69,6 +70,14 @@ process.on('unhandledRejection', (reason, promise) => {
 const queue = new TaskQueue();
 const downloads = new Map<string, DownloadItem>();
 let mainWindow: BrowserWindow | null = null;
+
+export function clearDownloads(): void {
+  downloads.clear();
+}
+
+export function clearQueue(): void {
+  queue.clear();
+}
 const isSmokeTest = process.argv.includes('--smoke-test');
 const SMOKE_TEST_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -183,134 +192,35 @@ function sendUpdate(id: string): void {
 }
 
 function runPipeline(item: DownloadItem): void {
-  queue.add(async () => {
-    const videoId = extractVideoId(item.url);
-    if (videoId) {
-      const cachedPath = getCachedPath(videoId);
-      if (cachedPath) {
-        logging.info(`using cached video for ${videoId}: ${cachedPath}`);
-        item.outputPath = cachedPath;
-        item.status = strings.status.readyToSend;
-        item.progress = 100;
-        item.error = null;
-        sendUpdate(item.id);
-        return;
-      }
-    }
+  const pipelineDeps: PipelineDeps = {
+    extractVideoId,
+    getCachedPath,
+    setCachedPath,
+    ensureTools,
+    getVideoInfo,
+    downloadVideo,
+    transcodeToMp4,
+    ensureOutputDir,
+    hasEnoughDiskSpace,
+    buildOutputPath,
+    ensureUniquePath,
+    throttle,
+    logging,
+    strings,
+    fs: { existsSync: fs.existsSync, unlinkSync: fs.unlinkSync },
+    OUTPUT_DIR,
+    PROGRESS_UPDATE_MIN_MS
+  };
 
-    const updateProgress = throttle((progress: number) => {
-      item.progress = progress;
-      sendUpdate(item.id);
-    }, PROGRESS_UPDATE_MIN_MS);
-
-    try {
-      await ensureTools();
-      const info = await getVideoInfo(item.url);
-      item.title = info.title;
-      sendUpdate(item.id);
-
-      logging.info(`[Pipeline] Checking disk space for ${info.sizeBytes} bytes`);
-      ensureOutputDir();
-      const required = info.sizeBytes > 0 ? info.sizeBytes * 2 : 0;
-      if (!hasEnoughDiskSpace(OUTPUT_DIR, required)) {
-        logging.error(`[Pipeline] Not enough disk space: ${required} required`);
-        item.error = strings.errors.notEnoughDisk;
-        item.status = strings.status.ready;
-        sendUpdate(item.id);
-        return;
-      }
-
-      logging.info('[Pipeline] Starting download');
-      const downloadResult = await downloadVideo(item.url, (percent) => {
-        item.status = strings.status.downloading;
-        updateProgress(Math.round(percent));
-      }, info);
-
-      item.tempPath = downloadResult.tempPath;
-      logging.info(`[Pipeline] Downloaded to ${item.tempPath}. Starting transcoding.`);
-      item.status = strings.status.transcoding;
-      item.progress = 0;
-      sendUpdate(item.id);
-
-      const outputPath = ensureUniquePath(buildOutputPath(info.title));
-      await transcodeToMp4(item.tempPath, outputPath, (time, duration) => {
-        const percent = duration > 0 ? Math.min(100, Math.round((time / duration) * 100)) : 0;
-        updateProgress(percent);
-      });
-
-      logging.info(`[Pipeline] Transcoding finished: ${outputPath}`);
-      item.outputPath = outputPath;
-      if (videoId) {
-        setCachedPath(videoId, outputPath);
-      }
-      item.status = strings.status.readyToSend;
-      item.progress = 100;
-      item.error = null;
-      sendUpdate(item.id);
-    } catch (error) {
-      logging.error('[Pipeline] Global failure', error instanceof Error ? error : new Error(String(error)));
-      
-      let errorMsg = strings.errors.downloadFailed;
-      let errorType: string | undefined;
-      let errorStderr: string | undefined;
-
-      if (error instanceof AppError) {
-        errorType = error.type;
-        errorStderr = error.stderr;
-      } else if (error instanceof Error) {
-        errorType = error.message;
-      }
-
-      if (errorType === 'INFO_ERROR' || errorType === 'INFO_PARSE_ERROR') {
-        errorMsg = strings.errors.infoError;
-      } else if (errorType === 'FILE_TOO_LARGE') {
-        errorMsg = strings.errors.fileTooLarge;
-      } else if (errorType === 'NETWORK_ERROR') {
-        errorMsg = strings.errors.networkError;
-      } else if (errorType === 'FORMAT_ERROR') {
-        errorMsg = strings.errors.formatError;
-      } else if (errorType === 'EXTRACTION_ERROR') {
-        errorMsg = strings.errors.extractionError;
-      } else if (errorType === 'TIMEOUT') {
-        errorMsg = strings.errors.timeoutError;
-      } else if (errorType === 'STALLED') {
-        errorMsg = strings.errors.stalledError;
-      } else if (errorType === 'TRANSCODE_TIMEOUT') {
-        errorMsg = strings.errors.timeoutError;
-      } else if (errorType === 'TRANSCODE_STALLED') {
-        errorMsg = strings.errors.stalledError;
-      }
-      
-      if (errorStderr) {
-        logging.error(`[Pipeline] Captured stderr: ${errorStderr}`);
-        if (errorStderr.includes('Sign in to confirm you’re not a bot')) {
-          errorMsg = 'YouTube prašo patvirtinti, kad nesate robotas.';
-        } else if (errorStderr.includes('This video is age-restricted')) {
-          errorMsg = 'Vaizdo įrašas turi amžiaus ribojimą.';
-        } else if (errorStderr.includes('Video unavailable')) {
-          errorMsg = 'Vaizdo įrašas nepasiekiamas.';
-        } else if (errorStderr.includes('GVS PO Token')) {
-          errorMsg = 'YouTube reikalauja papildomo patvirtinimo (PO Token). Bandykite vėliau arba atnaujinkite nustatymus.';
-        }
-      }
-
-      item.error = errorMsg;
-      item.status = strings.status.ready;
-      sendUpdate(item.id);
-    } finally {
-      if (item.tempPath) {
-        try {
-          if (fs.existsSync(item.tempPath)) {
-            fs.unlinkSync(item.tempPath);
-            logging.info(`[Pipeline] Cleanup: Deleted temp file ${item.tempPath}`);
-          }
-          item.tempPath = undefined;
-        } catch (error) {
-          logging.warn(`[Pipeline] Cleanup: Failed to delete temp file ${item.tempPath}`);
-        }
-      }
-    }
-  });
+  queue.add(() => runPipelineTask(item.url, item.id, (update) => {
+    if (update.title !== undefined) item.title = update.title;
+    if (update.status !== undefined) item.status = update.status;
+    if (update.progress !== undefined) item.progress = update.progress;
+    if (update.error !== undefined) item.error = update.error;
+    if (update.outputPath !== undefined) item.outputPath = update.outputPath;
+    if (update.tempPath !== undefined) item.tempPath = update.tempPath;
+    sendUpdate(item.id);
+  }, pipelineDeps));
 }
 
 function createWindow(): void {

@@ -32,27 +32,31 @@ export interface DownloadResult {
   tempPath: string;
 }
 
-function getExtractorArgs(): string {
+export function getExtractorArgs(poToken?: string, visitorData?: string): string {
   let args = 'youtube:player-client=mweb,web;player-skip=webpage,configs';
   const tokens: string[] = [];
-  if (YOUTUBE_PO_TOKEN) {
-    tokens.push(`web.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`web.player+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`mweb.gvs+${YOUTUBE_PO_TOKEN}`);
-    tokens.push(`mweb.player+${YOUTUBE_PO_TOKEN}`);
+  if (poToken) {
+    tokens.push(`web.gvs+${poToken}`);
+    tokens.push(`web.player+${poToken}`);
+    tokens.push(`mweb.gvs+${poToken}`);
+    tokens.push(`mweb.player+${poToken}`);
   }
   if (tokens.length > 0) {
     args += `;po_token=${tokens.join(',')}`;
   }
-  if (YOUTUBE_VISITOR_DATA) {
-    args += `;visitor_data=${YOUTUBE_VISITOR_DATA}`;
+  if (visitorData) {
+    args += `;visitor_data=${visitorData}`;
   }
   return args;
 }
 
-export function getVideoInfo(url: string): Promise<VideoInfo> {
+export function getVideoInfo(url: string, deps?: Pick<DownloadDeps, 'spawnFn' | 'ytDlpPath' | 'poToken' | 'visitorData' | 'cookiesFromBrowser' | 'infoTimeoutMs'>): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
-    const ytDlpPath = getYtDlpPath();
+    const ytDlpPath = deps?.ytDlpPath || getYtDlpPath();
+    const spawnFn = deps?.spawnFn || spawn;
+    const poToken = deps?.poToken !== undefined ? deps.poToken : YOUTUBE_PO_TOKEN;
+    const visitorData = deps?.visitorData !== undefined ? deps.visitorData : YOUTUBE_VISITOR_DATA;
+    const cookies = deps?.cookiesFromBrowser !== undefined ? deps.cookiesFromBrowser : COOKIES_FROM_BROWSER;
     const args = [
       '--no-playlist',
       '--dump-json',
@@ -60,26 +64,27 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
       '--user-agent',
       USER_AGENT,
       '--extractor-args',
-      getExtractorArgs(),
+      getExtractorArgs(poToken, visitorData),
       '--js-runtimes',
       'node'
     ];
-    if (COOKIES_FROM_BROWSER) {
-      args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
+    if (cookies) {
+      args.push('--cookies-from-browser', cookies);
     }
     args.push(url);
 
     logging.info(`[Pipeline] Getting video info for: ${url}`);
     logging.debug(`[Pipeline] Executing: ${ytDlpPath} ${args.join(' ')}`);
 
-    const proc = spawn(ytDlpPath, args);
+    const proc = spawnFn(ytDlpPath, args);
     let stdout = '';
     let stderr = '';
 
+    const infoTimeout = deps?.infoTimeoutMs !== undefined ? deps.infoTimeoutMs : INFO_TIMEOUT_MS;
     const timeout = setTimeout(() => {
-      logging.error(`[Pipeline] yt-dlp info timed out after ${INFO_TIMEOUT_MS}ms, killing process`);
+      logging.error(`[Pipeline] yt-dlp info timed out after ${infoTimeout}ms, killing process`);
       proc.kill('SIGKILL');
-    }, INFO_TIMEOUT_MS);
+    }, infoTimeout);
 
     proc.stdout.on('data', (data) => (stdout += data.toString()));
     proc.stderr.on('data', (data) => (stderr += data.toString()));
@@ -127,7 +132,7 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
   });
 }
 
-function classifyError(stderrText: string): AppErrorType {
+export function classifyError(stderrText: string): AppErrorType {
   const text = stderrText.toLowerCase();
   if (text.includes('requested format is not available') || text.includes('format not available')) {
     return 'FORMAT_ERROR';
@@ -138,8 +143,32 @@ function classifyError(stderrText: string): AppErrorType {
   return 'EXTRACTION_ERROR';
 }
 
-function spawnDownload(url: string, format: string, tempPath: string, onProgress: (percent: number) => void): Promise<void> {
+export interface DownloadDeps {
+  spawnFn?: typeof spawn;
+  ytDlpPath?: string;
+  ffmpegPath?: string;
+  poToken?: string;
+  visitorData?: string;
+  cookiesFromBrowser?: string;
+  formatPrimary?: string;
+  formatFallback?: string;
+  retries?: number;
+  infoTimeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  maxFileSizeBytes?: number;
+  tempDir?: string;
+}
+
+function spawnDownload(url: string, format: string, tempPath: string, onProgress: (percent: number) => void, deps?: DownloadDeps): Promise<void> {
   return new Promise((resolve, reject) => {
+    const ytDlpPath = deps?.ytDlpPath || getYtDlpPath();
+    const ffmpegPath = deps?.ffmpegPath || getFfmpegPath();
+    const spawnFn = deps?.spawnFn || spawn;
+    const poToken = deps?.poToken !== undefined ? deps.poToken : YOUTUBE_PO_TOKEN;
+    const visitorData = deps?.visitorData !== undefined ? deps.visitorData : YOUTUBE_VISITOR_DATA;
+    const cookies = deps?.cookiesFromBrowser !== undefined ? deps.cookiesFromBrowser : COOKIES_FROM_BROWSER;
+
     const args = [
       '--no-playlist',
       '--newline',
@@ -153,18 +182,18 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       '--user-agent',
       USER_AGENT,
       '--extractor-args',
-      getExtractorArgs(),
+      getExtractorArgs(poToken, visitorData),
       '--js-runtimes',
       'node',
       '--ffmpeg-location',
-      getFfmpegPath()
+      ffmpegPath
     ];
-    if (COOKIES_FROM_BROWSER) {
-      args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
+    if (cookies) {
+      args.push('--cookies-from-browser', cookies);
     }
     args.push(url);
 
-    const proc = spawn(getYtDlpPath(), args);
+    const proc = spawnFn(ytDlpPath, args);
     logging.debug(`Executing: ${getYtDlpPath()} ${args.join(' ')}`);
     let stderr = '';
     let lastProgressAt = Date.now();
@@ -173,19 +202,22 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
     let killedByWatchdog = false;
     let killedByTotalTimeout = false;
 
+    const noProgressTimeout = deps?.noProgressTimeoutMs !== undefined ? deps.noProgressTimeoutMs : DOWNLOAD_NO_PROGRESS_TIMEOUT_MS;
+    const totalTimeoutMs = deps?.totalTimeoutMs !== undefined ? deps.totalTimeoutMs : DOWNLOAD_TOTAL_TIMEOUT_MS;
+
     const noProgressWatchdog = setInterval(() => {
-      if (Date.now() - lastProgressAt > DOWNLOAD_NO_PROGRESS_TIMEOUT_MS) {
+      if (Date.now() - lastProgressAt > noProgressTimeout) {
         killedByWatchdog = true;
-        logging.error(`No download progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms, killing yt-dlp process`);
+        logging.error(`No download progress for ${noProgressTimeout}ms, killing yt-dlp process`);
         proc.kill('SIGKILL');
       }
     }, 1_000);
 
     const totalTimeout = setTimeout(() => {
       killedByTotalTimeout = true;
-      logging.error(`Download total timeout of ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms reached, killing yt-dlp process`);
+      logging.error(`Download total timeout of ${totalTimeoutMs}ms reached, killing yt-dlp process`);
       proc.kill('SIGKILL');
-    }, DOWNLOAD_TOTAL_TIMEOUT_MS);
+    }, totalTimeoutMs);
 
     proc.stdout.on('data', (data) => {
       const line = data.toString();
@@ -210,14 +242,14 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
 
       if (killedByTotalTimeout) {
         const timeoutError = new AppError('TIMEOUT', { stderr, tempPath });
-        logging.error(`yt-dlp download timed out after ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms`, timeoutError);
+        logging.error(`yt-dlp download timed out after ${totalTimeoutMs}ms`, timeoutError);
         reject(timeoutError);
         return;
       }
 
       if (killedByWatchdog) {
         const stallError = new AppError('STALLED', { stderr, tempPath });
-        logging.error(`yt-dlp download stalled (no progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms)`, stallError);
+        logging.error(`yt-dlp download stalled (no progress for ${noProgressTimeout}ms)`, stallError);
         reject(stallError);
         return;
       }
@@ -234,35 +266,41 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
   });
 }
 
-export async function downloadVideo(url: string, onProgress: (percent: number) => void, existingInfo?: VideoInfo): Promise<DownloadResult> {
+export async function downloadVideo(url: string, onProgress: (percent: number) => void, existingInfo?: VideoInfo, deps?: DownloadDeps): Promise<DownloadResult> {
   logging.info(`Starting download for URL: ${url}`);
-  const info = existingInfo || await getVideoInfo(url);
-  if (info.sizeBytes > MAX_FILE_SIZE_BYTES) {
+  const formatPrimary = deps?.formatPrimary || DOWNLOAD_FORMAT_PRIMARY;
+  const formatFallback = deps?.formatFallback || DOWNLOAD_FORMAT_FALLBACK;
+  const retries = deps?.retries !== undefined ? deps.retries : DOWNLOAD_RETRIES;
+  const maxFileSize = deps?.maxFileSizeBytes !== undefined ? deps.maxFileSizeBytes : MAX_FILE_SIZE_BYTES;
+  const tempDir = deps?.tempDir || TEMP_DIR;
+
+  const info = existingInfo || await getVideoInfo(url, deps);
+  if (info.sizeBytes > maxFileSize) {
     throw new AppError('FILE_TOO_LARGE');
   }
 
   const safeName = `localtube-${Date.now()}.mp4`;
-  const tempPath = path.join(TEMP_DIR, safeName);
+  const tempPath = path.join(tempDir, safeName);
 
   let attempt = 0;
-  while (attempt <= DOWNLOAD_RETRIES) {
+  while (attempt <= retries) {
     try {
-      await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress);
+      await spawnDownload(url, formatPrimary, tempPath, onProgress, deps);
       return { info, tempPath };
     } catch (error) {
       if (error instanceof AppError && error.type === 'FORMAT_ERROR') {
         try {
-          await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress);
+          await spawnDownload(url, formatFallback, tempPath, onProgress, deps);
           return { info, tempPath };
         } catch (fallbackError) {
           attempt += 1;
-          if (attempt > DOWNLOAD_RETRIES) {
+          if (attempt > retries) {
             throw fallbackError;
           }
         }
       } else {
         attempt += 1;
-        if (attempt > DOWNLOAD_RETRIES) {
+        if (attempt > retries) {
           throw error;
         }
       }

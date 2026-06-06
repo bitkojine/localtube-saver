@@ -75,98 +75,8 @@ jobs:
             git push origin "$TAG"
           fi
 
-  release_build:
+  release:
     needs: tag
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: refs/tags/v${{ needs.tag.outputs.new_version }}
-          fetch-depth: 0
-
-      - name: Create Release (if not exists)
-        shell: bash
-        run: |
-          TAG="v${{ needs.tag.outputs.new_version }}"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Creating draft release for $TAG"
-            gh release create "$TAG" --title "Release $TAG" --draft --notes "Automated release for $TAG"
-          else
-            echo "Release $TAG already exists."
-          fi
-
-      - name: Verify Tag
-        run: |
-          git describe --tags --always
-          echo "GITHUB_REF is $GITHUB_REF"
-          git log -1 --format=%s
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build TypeScript
-        run: npm run build:ts
-        working-directory: apps/desktop
-
-      - name: Build Electron app
-        run: npx electron-builder --publish=never
-        working-directory: apps/desktop
-        env:
-          DEBUG: electron-builder
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Upload release assets from macOS
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          TAG="v${{ needs.tag.outputs.new_version }}"
-          files="$(find apps/desktop/dist -maxdepth 1 -type f ! -name 'builder-debug.yml' -print)"
-          if [ -z "$files" ]; then
-            echo "No macOS release assets found"
-            exit 1
-          fi
-          find apps/desktop/dist -maxdepth 1 -type f ! -name 'builder-debug.yml' -print0 | xargs -0 gh release upload "$TAG" --clobber
-
-      - name: Upload release assets from Windows
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        working-directory: apps/desktop
-        run: |
-          $tag = 'v${{ needs.tag.outputs.new_version }}'
-          Write-Host "Uploading assets for tag: $tag"
-          $files = Get-ChildItem dist -File | Where-Object { $_.Name -ne 'builder-debug.yml' -and $_.Attributes -ne 'Directory' } | Select-Object -ExpandProperty FullName
-          if (!$files -or $files.Count -eq 0) {
-            Write-Host "Warning: No Windows release assets found in dist/"
-            Get-ChildItem dist | Select-Object Name
-            throw 'No Windows release assets found'
-          }
-          foreach ($file in $files) {
-            Write-Host "Uploading: $file"
-            gh release upload $tag $file --clobber
-          }
-
-  finalize_release:
-    needs:
-      - tag
-      - release_build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -174,13 +84,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: refs/tags/v${{ needs.tag.outputs.new_version }}
 
-      - name: Finalize Release
+      - name: Create Release
         shell: bash
         run: |
           TAG="v${{ needs.tag.outputs.new_version }}"
-          echo "Publishing release $TAG"
-          gh release edit "$TAG" --draft=false
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Creating release for $TAG"
+            gh release create "$TAG" --title "Release $TAG" --notes "See CHANGELOG.md for details."
+          else
+            echo "Release $TAG already exists."
+          fi

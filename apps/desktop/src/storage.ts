@@ -5,58 +5,94 @@ import { OUTPUT_DIR, MAX_FILENAME_LENGTH } from './config';
 import * as logging from './logging';
 import type { FileInfo } from './types';
 
-const CACHE_FILE = path.join(OUTPUT_DIR, '.cache.json');
-
 type Cache = Record<string, string>;
 
-export function ensureOutputDir(): void {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+export interface FsModule {
+  mkdirSync: typeof fs.mkdirSync;
+  existsSync: typeof fs.existsSync;
+  readFileSync: typeof fs.readFileSync;
+  writeFileSync: typeof fs.writeFileSync;
+  readdirSync: typeof fs.readdirSync;
+  statSync: typeof fs.statSync;
+  statfsSync: typeof fs.statfsSync;
+  unlinkSync: typeof fs.unlinkSync;
 }
 
-function loadCache(): Cache {
+const defaultFs: FsModule = {
+  mkdirSync: fs.mkdirSync,
+  existsSync: fs.existsSync,
+  readFileSync: fs.readFileSync,
+  writeFileSync: fs.writeFileSync,
+  readdirSync: fs.readdirSync,
+  statSync: fs.statSync,
+  statfsSync: fs.statfsSync,
+  unlinkSync: fs.unlinkSync,
+};
+
+function getFs(fsModule?: FsModule): FsModule {
+  return fsModule || defaultFs;
+}
+
+function cacheFilePath(outputDir: string): string {
+  return path.join(outputDir, '.cache.json');
+}
+
+export function parseCache(raw: Record<string, string>): Cache {
+  const cache: Cache = {};
+  for (const key of Object.keys(raw)) {
+    if (typeof raw[key] === 'string') {
+      cache[key] = raw[key];
+    }
+  }
+  return cache;
+}
+
+function ensureOutputDirImpl(outputDir: string, fsModule?: FsModule): void {
+  getFs(fsModule).mkdirSync(outputDir, { recursive: true });
+}
+
+function loadCache(fsModule?: FsModule): Cache {
+  const f = getFs(fsModule);
+  const filePath = cacheFilePath(OUTPUT_DIR);
   try {
-    if (fs.existsSync(CACHE_FILE)) {
-      const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    if (f.existsSync(filePath)) {
+      const raw = JSON.parse(f.readFileSync(filePath, 'utf8'));
+      const cache = parseCache(raw);
+      if (Object.keys(cache).length === 0 && typeof raw !== 'object') {
         logging.debug(`[Storage] Invalid cache format, resetting`);
-        return {};
-      }
-      const cache: Cache = {};
-      for (const key of Object.keys(raw)) {
-        if (typeof raw[key] === 'string') {
-          cache[key] = raw[key];
-        }
       }
       return cache;
     }
   } catch (_error) {
-    logging.debug(`[Storage] Failed to load cache from ${CACHE_FILE}`);
+    logging.debug(`[Storage] Failed to load cache from ${filePath}`);
   }
   return {};
 }
 
-function saveCache(cache: Cache): void {
+function saveCache(cache: Cache, fsModule?: FsModule): void {
+  const f = getFs(fsModule);
+  const filePath = cacheFilePath(OUTPUT_DIR);
   try {
-    ensureOutputDir();
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
+    ensureOutputDirImpl(OUTPUT_DIR, fsModule);
+    f.writeFileSync(filePath, JSON.stringify(cache, null, 2));
   } catch (_error) {
-    logging.debug(`[Storage] Failed to save cache to ${CACHE_FILE}`);
+    logging.debug(`[Storage] Failed to save cache to ${filePath}`);
   }
 }
 
-export function getCachedPath(videoId: string): string | null {
-  const cache = loadCache();
+export function getCachedPath(videoId: string, fsModule?: FsModule): string | null {
+  const cache = loadCache(fsModule);
   const filePath = cache[videoId];
-  if (filePath && fs.existsSync(filePath)) {
+  if (filePath && getFs(fsModule).existsSync(filePath)) {
     return filePath;
   }
   return null;
 }
 
-export function setCachedPath(videoId: string, filePath: string): void {
-  const cache = loadCache();
+export function setCachedPath(videoId: string, filePath: string, fsModule?: FsModule): void {
+  const cache = loadCache(fsModule);
   cache[videoId] = filePath;
-  saveCache(cache);
+  saveCache(cache, fsModule);
 }
 
 export function sanitizeTitle(title: string): string {
@@ -65,14 +101,15 @@ export function sanitizeTitle(title: string): string {
   return truncated.length > 0 ? truncated : 'video';
 }
 
-export function buildOutputPath(title: string): string {
-  ensureOutputDir();
+export function buildOutputPath(title: string, fsModule?: FsModule): string {
+  ensureOutputDirImpl(OUTPUT_DIR, fsModule);
   const base = sanitizeTitle(title);
   return path.join(OUTPUT_DIR, `${base}.mp4`);
 }
 
-export function ensureUniquePath(filePath: string): string {
-  if (!fs.existsSync(filePath)) {
+export function ensureUniquePath(filePath: string, fsModule?: FsModule): string {
+  const f = getFs(fsModule);
+  if (!f.existsSync(filePath)) {
     return filePath;
   }
   const dir = path.dirname(filePath);
@@ -81,17 +118,17 @@ export function ensureUniquePath(filePath: string): string {
   let counter = 1;
   while (true) {
     const candidate = path.join(dir, `${base} (${counter})${ext}`);
-    if (!fs.existsSync(candidate)) {
+    if (!f.existsSync(candidate)) {
       return candidate;
     }
     counter += 1;
   }
 }
 
-export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): boolean {
+export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number, fsModule?: FsModule): boolean {
   try {
-    
-    const stats = fs.statfsSync(targetDir);
+    const f = getFs(fsModule);
+    const stats = f.statfsSync(targetDir);
     const free = Number(stats.bavail) * Number(stats.bsize);
     return free >= requiredBytes;
   } catch (_error) {
@@ -99,15 +136,16 @@ export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): bo
   }
 }
 
-export function getFilesInfo(): FileInfo[] {
-  ensureOutputDir();
+export function getFilesInfo(fsModule?: FsModule): FileInfo[] {
+  const f = getFs(fsModule);
+  ensureOutputDirImpl(OUTPUT_DIR, fsModule);
   try {
-    const files = fs.readdirSync(OUTPUT_DIR);
+    const files = f.readdirSync(OUTPUT_DIR);
     return files
-      .filter((file) => !file.startsWith('.')) 
+      .filter((file) => !file.startsWith('.'))
       .map((file) => {
         const filePath = path.join(OUTPUT_DIR, file);
-        const stats = fs.statSync(filePath);
+        const stats = f.statSync(filePath);
         return {
           name: file,
           path: filePath,
@@ -121,14 +159,19 @@ export function getFilesInfo(): FileInfo[] {
   }
 }
 
-export function deleteFile(filePath: string): boolean {
+export function deleteFile(filePath: string, fsModule?: FsModule): boolean {
+  const f = getFs(fsModule);
   try {
-    if (fs.existsSync(filePath) && filePath.startsWith(OUTPUT_DIR)) {
-      fs.unlinkSync(filePath);
+    if (f.existsSync(filePath) && filePath.startsWith(OUTPUT_DIR)) {
+      f.unlinkSync(filePath);
       return true;
     }
   } catch (_error) {
     logging.debug(`[Storage] Failed to delete file: ${filePath}`);
   }
   return false;
+}
+
+export function ensureOutputDir(outputDir?: string, fsModule?: FsModule): void {
+  ensureOutputDirImpl(outputDir || OUTPUT_DIR, fsModule);
 }

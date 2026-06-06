@@ -5,6 +5,23 @@ import * as https from 'https';
 import { YTDLP_NIGHTLY_REPO } from './config';
 import * as logging from './logging';
 
+export interface ToolsDeps {
+  httpsGet?: typeof https.get;
+  fs?: {
+    createWriteStream: typeof createWriteStream;
+    renameSync: typeof renameSync;
+    unlinkSync: typeof unlinkSync;
+    existsSync: typeof existsSync;
+    readFileSync: typeof readFileSync;
+    writeFileSync: typeof writeFileSync;
+    chmodSync: typeof chmodSync;
+    mkdirSync: typeof mkdirSync;
+  };
+  ytdlpRepo?: string;
+}
+
+const defaultFs = { createWriteStream, mkdirSync, existsSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync };
+
 let toolDir: string | null = null;
 
 export function setToolDir(dir: string): void {
@@ -33,12 +50,14 @@ export function getFfprobePath(): string {
   return ffprobe.path || ffprobe;
 }
 
-async function downloadFile(url: string, destination: string): Promise<void> {
+async function downloadFile(url: string, destination: string, deps?: ToolsDeps): Promise<void> {
   const tempPath = `${destination}.download`;
+  const f = deps?.fs || defaultFs;
+  const httpGet = deps?.httpsGet || https.get;
 
   const fetch = (currentUrl: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      https.get(currentUrl, async (res) => {
+      httpGet(currentUrl, async (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           try {
             await fetch(res.headers.location);
@@ -53,13 +72,13 @@ async function downloadFile(url: string, destination: string): Promise<void> {
           return;
         }
 
-        const file = createWriteStream(tempPath);
+        const file = f.createWriteStream(tempPath);
         try {
           await pipeline(res, file);
-          renameSync(tempPath, destination);
+          f.renameSync(tempPath, destination);
           resolve();
         } catch (err) {
-          try { unlinkSync(tempPath); } catch (_ignore) {
+          try { f.unlinkSync(tempPath); } catch (_ignore) {
             logging.debug(`[Tools] Failed to clean up temp file: ${tempPath}`);
           }
           reject(err);
@@ -71,19 +90,21 @@ async function downloadFile(url: string, destination: string): Promise<void> {
   await fetch(url);
 }
 
-export async function ensureYtDlp(): Promise<string> {
+export async function ensureYtDlp(deps?: ToolsDeps): Promise<string> {
   const target = getYtDlpPath();
   const marker = `${target}.version`;
   const today = new Date().toISOString().split('T')[0];
+  const f = deps?.fs || defaultFs;
+  const repo = deps?.ytdlpRepo || YTDLP_NIGHTLY_REPO;
 
-  if (existsSync(target) && existsSync(marker)) {
-    const lastChecked = readFileSync(marker, 'utf8').trim();
+  if (f.existsSync(target) && f.existsSync(marker)) {
+    const lastChecked = f.readFileSync(marker, 'utf8').trim();
     if (lastChecked === today) {
       return target;
     }
   }
 
-  mkdirSync(getToolDir(), { recursive: true });
+  f.mkdirSync(getToolDir(), { recursive: true });
 
   let assetName = 'yt-dlp';
   if (process.platform === 'darwin') {
@@ -94,14 +115,14 @@ export async function ensureYtDlp(): Promise<string> {
     assetName = 'yt-dlp_linux';
   }
 
-  const url = `${YTDLP_NIGHTLY_REPO}/releases/latest/download/${assetName}`;
+  const url = `${repo}/releases/latest/download/${assetName}`;
   logging.info(`Updating yt-dlp to latest nightly from ${url}`);
   try {
-    await downloadFile(url, target);
-    writeFileSync(marker, today);
-    chmodSync(target, 0o755);
+    await downloadFile(url, target, deps);
+    f.writeFileSync(marker, today);
+    f.chmodSync(target, 0o755);
     } catch (error) {
-      if (!existsSync(target)) {
+      if (!f.existsSync(target)) {
         throw error;
       }
       const err = error instanceof Error ? error : new Error(String(error));
@@ -110,8 +131,8 @@ export async function ensureYtDlp(): Promise<string> {
   return target;
 }
 
-export async function ensureTools(): Promise<void> {
-  await ensureYtDlp();
+export async function ensureTools(deps?: ToolsDeps): Promise<void> {
+  await ensureYtDlp(deps);
   getFfmpegPath();
   getFfprobePath();
 }

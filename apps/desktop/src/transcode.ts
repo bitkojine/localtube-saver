@@ -5,12 +5,18 @@ import { getFfmpegPath, getFfprobePath } from './tools';
 import { FfprobeOutput } from './types';
 import { AppError } from './AppError';
 
-interface ProbeResult {
+export interface ProbeResult {
   duration: number;
   audioBitrate: number;
 }
 
-function parseFfprobeOutput(stdout: string): ProbeResult {
+export function getAudioArgs(audioBitrate: number): string[] {
+  return audioBitrate >= 160000
+    ? ['-c:a', 'copy']
+    : ['-c:a', 'aac', '-b:a', '256k'];
+}
+
+export function parseFfprobeOutput(stdout: string): ProbeResult {
   try {
     const parsed = JSON.parse(stdout);
     if (typeof parsed !== 'object' || parsed === null) {
@@ -39,7 +45,7 @@ function parseFfprobeOutput(stdout: string): ProbeResult {
   }
 }
 
-export function runFfprobe(filePath: string): Promise<ProbeResult> {
+export function runFfprobe(filePath: string, deps?: { spawnFn?: typeof spawn, ffprobePath?: string }): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
     const args = [
       '-v', 'error',
@@ -48,7 +54,9 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
       '-of', 'json',
       filePath
     ];
-    const proc = spawn(getFfprobePath(), args);
+    const ffprobePath = deps?.ffprobePath || getFfprobePath();
+    const spawnFn = deps?.spawnFn || spawn;
+    const proc = spawnFn(ffprobePath, args);
     let stdout = '';
     let stderr = '';
 
@@ -82,11 +90,9 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
   });
 }
 
-function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: number, onProgress: (time: number) => void): Promise<void> {
+function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: number, onProgress: (time: number) => void, deps?: { spawnFn?: typeof spawn, ffmpegPath?: string }): Promise<void> {
   return new Promise((resolve, reject) => {
-    const audioArgs = audioBitrate >= 160000
-      ? ['-c:a', 'copy']
-      : ['-c:a', 'aac', '-b:a', '256k'];
+    const audioArgs = getAudioArgs(audioBitrate);
 
     const args = [
       '-y',
@@ -101,8 +107,10 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
       outputPath
     ];
 
-    const proc = spawn(getFfmpegPath(), args);
-    writeLog(`ffmpeg transcoding: ${getFfmpegPath()} ${args.join(' ')}`);
+    const ffmpegPath = deps?.ffmpegPath || getFfmpegPath();
+    const spawnFn = deps?.spawnFn || spawn;
+    const proc = spawnFn(ffmpegPath, args);
+    writeLog(`ffmpeg transcoding: ${ffmpegPath} ${args.join(' ')}`);
     let stderr = '';
     let lastProgressAt = Date.now();
     let killedByStallWatchdog = false;
@@ -171,9 +179,14 @@ function formatTime(seconds: number): string {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toFixed(1).padStart(5, '0')}`;
 }
 
-export async function transcodeToMp4(inputPath: string, outputPath: string, onProgress: (time: number, duration: number) => void): Promise<void> {
-  const info = await runFfprobe(inputPath);
+export async function transcodeToMp4(
+  inputPath: string,
+  outputPath: string,
+  onProgress: (time: number, duration: number) => void,
+  deps?: { spawnFn?: typeof spawn, ffmpegPath?: string, ffprobePath?: string }
+): Promise<void> {
+  const info = await runFfprobe(inputPath, deps);
   await spawnTranscode(inputPath, outputPath, info.audioBitrate, (time) => {
     onProgress(time, info.duration);
-  });
+  }, deps);
 }

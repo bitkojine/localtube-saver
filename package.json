@@ -11,7 +11,7 @@
   },
   "lint-staged": {
     "apps/desktop/**/*.{ts,js}": [
-      "npm run lint -w localtube-desktop"
+      "npm run lint -w localtube"
     ]
   },
   "scripts": {

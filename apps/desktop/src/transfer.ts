@@ -13,19 +13,39 @@ export interface TransferServerInfo {
   expiresAt: number;
 }
 
-function createToken(): string {
-  return crypto.randomBytes(16).toString('hex');
+export interface TransferDeps {
+  expressFn?: typeof express;
+  httpCreateServer?: (app: ReturnType<typeof express>) => Server;
+  fs?: {
+    statSync: typeof fs.statSync;
+    createReadStream: typeof fs.createReadStream;
+    existsSync: typeof fs.existsSync;
+  };
+  crypto?: {
+    randomBytes: typeof crypto.randomBytes;
+  };
+  bindHost?: string;
 }
 
-export async function createTransferServer(filePath: string, bindHost = TRANSFER_BIND_HOST): Promise<TransferServerInfo> {
-  const stats = fs.statSync(filePath);
+const defaultFs = { statSync: fs.statSync, createReadStream: fs.createReadStream, existsSync: fs.existsSync };
+const defaultCrypto = { randomBytes: crypto.randomBytes };
+
+function createToken(depsCrypto?: { randomBytes: typeof crypto.randomBytes }): string {
+  const c = depsCrypto || defaultCrypto;
+  return c.randomBytes(16).toString('hex');
+}
+
+export async function createTransferServer(filePath: string, bindHost?: string, deps?: TransferDeps): Promise<TransferServerInfo> {
+  const f = deps?.fs || defaultFs;
+  const stats = f.statSync(filePath);
   if (stats.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('FILE_TOO_LARGE');
   }
 
-  const app = express();
-  const token = createToken();
+  const app = (deps?.expressFn || express)();
+  const token = createToken(deps?.crypto);
   const expiresAt = Date.now() + TRANSFER_TOKEN_TTL_MS;
+  const host = bindHost || deps?.bindHost || TRANSFER_BIND_HOST;
 
   function isAuthorized(req: Request): boolean {
     const reqToken = (req.query.token as string) || req.headers['x-localtube-token'];
@@ -91,7 +111,7 @@ export async function createTransferServer(filePath: string, bindHost = TRANSFER
     const encodedFileName = encodeURIComponent(fileName);
     res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}"; filename*=UTF-8''${encodedFileName}`);
 
-    const stream = fs.createReadStream(filePath);
+    const stream = f.createReadStream(filePath);
     let lastDataAt = Date.now();
 
     const timeout = setInterval(() => {
@@ -120,8 +140,14 @@ export async function createTransferServer(filePath: string, bindHost = TRANSFER
     stream.pipe(res);
   });
 
+  const createServer = deps?.httpCreateServer || ((app: ReturnType<typeof express>) => {
+    const http = require('http') as typeof import('http');
+    return http.createServer(app);
+  });
+
   const server = await new Promise<Server>((resolve, reject) => {
-    const listener = app.listen(0, bindHost, () => resolve(listener));
+    const listener = createServer(app);
+    listener.listen(0, host, () => resolve(listener));
     listener.on('error', (err: Error) => {
       writeLog(`server listen error: ${err.message}`);
       reject(err);

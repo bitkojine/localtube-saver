@@ -21,9 +21,9 @@ The project uses a **dual-module architecture**. This is the most common cause o
 
 #### 🛡️ Strict Type Safety
 
-*   **NEVER use `any`:** Use `unknown`, specific interfaces, or generic constraints.
+*   **NEVER use `any`:** Define a proper domain type (interface, union, or Error subclass) instead. `unknown` is also banned by the ESLint config — use specific types only.
 *   **Generics:** Do not use `any` as a default type for generics.
-*   **Catch Blocks:** Always type your error as `unknown` and use type guards or assertions before accessing properties.
+*   **Catch Blocks:** The ESLint config bans both `any` and `unknown`. Catch `error` with a specific type or use an explicit type assertion after catching.
 
 #### 🏎️ Race Conditions
 

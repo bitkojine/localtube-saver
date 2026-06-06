@@ -11,6 +11,14 @@ export class TaskQueue {
   private queue: InternalQueueItem[] = [];
   private activeCount: number = 0;
 
+  get size(): number {
+    return this.queue.length;
+  }
+
+  get active(): number {
+    return this.activeCount;
+  }
+
   constructor(concurrency: number = MAX_CONCURRENT_DOWNLOADS) {
     this.concurrency = concurrency;
   }
@@ -32,6 +40,10 @@ export class TaskQueue {
       });
       this.next();
     });
+  }
+
+  clear(): void {
+    this.queue = [];
   }
 
   private next(): void {
