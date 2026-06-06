@@ -5,15 +5,8 @@ A CLI tool that downloads YouTube videos, transcodes them to iPhone-compatible M
 ## Quick Start
 
 ```bash
-npx github:bitkojine/localtube-saver <youtube-url>
-```
-
-Or from a clone:
-
-```bash
 git clone https://github.com/bitkojine/localtube-saver.git
-cd localtube-saver
-cd apps/desktop
+cd localtube-saver/apps/desktop
 npm install
 npm run build:ts
 node dist-tsc/src/cli.js <youtube-url>
@@ -37,6 +30,7 @@ The pipeline runs: download → transcode → start local HTTP server → print 
 - Disk space check (requires 2x estimated size)
 - Static file-based daily rotating logs with 7-day retention
 - Dependency injection across all modules — download, transcode, storage, tools, transfer accept deps interfaces for testability
+- **63 unit tests** across 8 test files, run in CI on macOS and Windows
 - Strict ESLint: no `any`, no `unknown`, no code comments
 
 ### What's Well-Engineered
@@ -49,12 +43,12 @@ The pipeline runs: download → transcode → start local HTTP server → print 
 - **Binary management.** yt-dlp auto-update with daily version check + graceful fallback.
 - **All Lithuanian UI strings** centralized in `strings.ts`.
 - **Zero framework dependencies.** Vanilla TypeScript, CommonJS output.
+- **63 unit tests** using `node:test` with mocked DI — no YouTube or network required.
 
 ### What Doesn't Work / Needs Work
 
-- **No tests.** Zero test files. Dependency injection was added to enable testing, but no tests are written yet.
 - **YouTube is unstable.** `YOUTUBE_PO_TOKEN` and `YOUTUBE_VISITOR_DATA` in `src/config.ts` are hardcoded to empty strings. Without these, YouTube may return bot-detection errors. No env loading, no config file, no documentation on obtaining these values.
-- **Windows is broken.** `storage.ts` uses `fs.statfsSync` (POSIX-only, crashes on Windows) — now injectable via `FsModule` so a mock can be provided, but the real impl still breaks. Cookie extraction assumes Chrome exists. The CI builds on Windows (TypeScript) but the app has never run there.
+- **Windows has limited runtime support.** The CLI builds, lints, and passes all 63 unit tests on Windows CI. `hasEnoughDiskSpace` gracefully skips the `statfsSync` check (POSIX-only). Cookie extraction assumes Chrome exists, but the full pipeline (download → transcode → serve) is not tested in CI (requires YouTube tokens).
 - **No configuration system.** PO tokens, cookie browser, bind address, output dir — all hardcoded in `config.ts`. No `.env`, no config file, no CLI flags beyond the URL.
 - **Transfer server is HTTP on `0.0.0.0`.** No HTTPS. Security relies entirely on a random 128-bit token in the URL with a 10-min TTL.
 - **Cache JSON has no locking.** Concurrent downloads to the same video ID could race on the cache file.
@@ -74,8 +68,11 @@ The pipeline runs: download → transcode → start local HTTP server → print 
 - ~~`apps/desktop/dist/` stale installer artifacts (696MB) — removed.~~
 - ~~ESLint `unknown` ban vs `AGENTS.md` contradiction — `AGENTS.md` corrected.~~
 - ~~`init()` without `await` in renderer — dead code deleted.~~
-- ~~CI built Electron binaries that were never published — now just lint + build.~~
+- ~~CI built Electron binaries that were never published — now just lint + build + test.~~
 - ~~Release workflow built Electron for macOS+Windows matrix — now just tag + create GitHub release.~~
+- ~~`statfsSync` crash on Windows — `FsModule.statfsSync` made optional, `hasEnoughDiskSpace` returns `true` on error.~~
+- ~~`renameSync` fail on Windows when destination exists — now unlinks destination before rename.~~
+- ~~No tests — 63 unit tests across 8 files, run in CI on both platforms.~~
 
 ## Technical Architecture
 
@@ -114,17 +111,18 @@ apps/desktop/
     download.ts        -- yt-dlp pipeline with progress/stall/timeout/retry
     transcode.ts       -- ffmpeg pipeline with probe + progress
     transfer.ts        -- Express transfer server + QR generation
-    storage.ts         -- File management + cache (statfsSync breaks Windows)
-    queue.ts           -- Concurrency-limited task queue (62 lines)
+    storage.ts         -- File management + cache (FsModule DI)
+    queue.ts           -- Concurrency-limited task queue (66 lines)
     tools.ts           -- Binary management (yt-dlp auto-update)
     logging.ts         -- Daily rotating file logger
     validation.ts      -- YouTube URL parser
     util.ts            -- Local IP, throttle
     strings.ts         -- Lithuanian UI strings
+    *.test.ts          -- 63 unit tests across 8 files
   dist-tsc/            -- Compiled JS (gitignored)
 
 .github/workflows/
-  ci.yml               -- Lint + build on macOS/Windows (Windows build only, app never ran)
+  ci.yml               -- Lint + build + test on macOS/Windows (63 tests pass on both)
   release.yml          -- Manual tag + GitHub release workflow
 ```
 
