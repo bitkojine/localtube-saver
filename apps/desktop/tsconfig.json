@@ -15,5 +15,8 @@
     "allowJs": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-tsc", "src/**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "dist-tsc", "src/**/*.test.ts"],
+  "ts-node": {
+    "transpileOnly": true
+  }
 }

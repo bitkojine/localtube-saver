@@ -14,7 +14,7 @@
     "start": "node dist-tsc/src/cli.js",
     "build:ts": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "test": "TS_NODE_TRANSPILE_ONLY=true node --require ts-node/register --test 'src/**/*.test.ts'"
+    "test": "node --require ts-node/register --test 'src/**/*.test.ts'"
   },
   "type": "commonjs",
   "dependencies": {
