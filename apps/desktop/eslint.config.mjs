@@ -45,9 +45,17 @@ export default [
     },
     rules: {
       "@typescript-eslint/no-unused-vars": "off",
-      "no-empty": "off",
+      "no-empty": ["error", { "allowEmptyCatch": true }],
       "no-unused-vars": "off",
-      "local/no-comments": "error"
+      "local/no-comments": "error",
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-restricted-types": ["error", {
+        "types": {
+          "unknown": {
+            "message": "Do not use 'unknown'. Define a proper domain type (interface, union, or Error subclass) instead."
+          }
+        }
+      }]
     }
   }
 ];

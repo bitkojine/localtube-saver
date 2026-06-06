@@ -1,47 +1,6 @@
+import type { CrashInfo, DownloadUpdate, FileInfo, LocaltubeAPI, TransferInfo } from './src/types';
+
 export {};
-
-interface FileInfo {
-  name: string;
-  path: string;
-  size: number;
-  createdAt: number;
-}
-
-interface TransferInfo {
-  url: string;
-  qr: string;
-  expiresAt: number;
-}
-
-interface DownloadUpdate {
-  id: string;
-  url: string;
-  title: string;
-  status: string;
-  progress: number;
-  error: string | null;
-  outputPath: string | null;
-  transfer: TransferInfo | null;
-}
-
-interface LocaltubeAPI {
-  startDownload: (url: string) => Promise<{ id: string; error?: string }>;
-  retryDownload: (id: string) => Promise<{ id: string }>;
-  startTransfer: (id: string) => Promise<{ id?: string; error?: string; transfer?: TransferInfo }>;
-  stopTransfer: (id: string) => Promise<void>;
-  restartForUpdate: () => Promise<void>;
-  discoverDevices: () => Promise<unknown>;
-  getVersion: () => Promise<string>;
-  getFiles: () => Promise<FileInfo[]>;
-  deleteFile: (filePath: string) => Promise<boolean>;
-  startTransferByPath: (filePath: string) => Promise<{ id?: string; error?: string; transfer?: TransferInfo }>;
-  log: (level: 'info' | 'warn' | 'error' | 'debug', message: string, err?: unknown) => void;
-  onUpdate: (callback: (data: DownloadUpdate) => void) => void;
-  onUpdateAvailable: (callback: () => void) => void;
-  onUpdateProgress: (callback: (percent: number) => void) => void;
-  onUpdateDownloaded: (callback: () => void) => void;
-  onCrash: (callback: (err: { message: string }) => void) => void;
-}
 
 declare global {
   interface Window {
@@ -66,7 +25,7 @@ const storageItemTemplate = document.getElementById('storageItemTemplate') as HT
 const items = new Map<string, HTMLElement>();
 const storageItems = new Map<string, HTMLElement>();
 const storageTransfers = new Map<string, TransferInfo | null>();
-const storageServers = new Map<string, any>();
+const storageServers = new Map<string, string>();
 
 const deletionsInProgress = new Set<string>();
 
@@ -187,8 +146,8 @@ async function loadStorage(): Promise<void> {
             window.localtube.log('error', `Transfer failed for: ${file.path}`, result.error);
             alert(result.error);
           }
-        } catch (err: unknown) {
-          window.localtube.log('error', `Exception in QR button handler for: ${file.path}`, err);
+        } catch (err) {
+          window.localtube.log('error', `Exception in QR button handler for: ${file.path}`, String(err));
           alert('Įvyko klaida bandant sukurti QR kodą.');
         } finally {
           qrBtn.disabled = false;
@@ -331,7 +290,7 @@ function renderItem(data: Partial<DownloadUpdate> & { id: string }): void {
 
 window.localtube.onUpdate(async (data: DownloadUpdate) => {
   renderItem(data);
-  if (data.status === 'Paruošta' || data.status === 'Paruošta siuntimui') {
+  if (data.refreshStorage) {
     await loadStorage();
   }
 });
@@ -350,7 +309,7 @@ window.localtube.onUpdateDownloaded(() => {
   updateRestartBtn.classList.remove('hidden');
 });
 
-window.localtube.onCrash((err: { message: string }) => {
+window.localtube.onCrash((err: CrashInfo) => {
   alert(`Programa netikėtai sustojo:\n${err.message}\n\nPerkraukite programą.`);
 });
 

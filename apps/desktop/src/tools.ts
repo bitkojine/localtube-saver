@@ -59,7 +59,9 @@ async function downloadFile(url: string, destination: string): Promise<void> {
           renameSync(tempPath, destination);
           resolve();
         } catch (err) {
-          try { unlinkSync(tempPath); } catch (_ignore) {  }
+          try { unlinkSync(tempPath); } catch (_ignore) {
+            logging.debug(`[Tools] Failed to clean up temp file: ${tempPath}`);
+          }
           reject(err);
         }
       }).on('error', reject);
@@ -98,13 +100,13 @@ export async function ensureYtDlp(): Promise<string> {
     await downloadFile(url, target);
     writeFileSync(marker, today);
     chmodSync(target, 0o755);
-  } catch (error: unknown) {
-    if (!existsSync(target)) {
-      throw error;
+    } catch (error) {
+      if (!existsSync(target)) {
+        throw error;
+      }
+      const err = error instanceof Error ? error : new Error(String(error));
+      logging.error(`yt-dlp update failed, using existing version: ${err.message}`);
     }
-    const err = error as Error;
-    logging.error(`yt-dlp update failed, using existing version: ${err.message}`);
-  }
   return target;
 }
 

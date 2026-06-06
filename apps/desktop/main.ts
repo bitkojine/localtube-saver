@@ -19,6 +19,8 @@ import { createTransferServer, closeTransferServer } from './src/transfer';
 import * as logging from './src/logging';
 import { getLocalIp, throttle } from './src/util';
 import { OUTPUT_DIR, PROGRESS_UPDATE_MIN_MS } from './src/config';
+import { AppLogPayload, AppErrorType, CrashInfo, DownloadStartResult, DownloadUpdate, TransferInfo, TransferStartResult } from './src/types';
+import { AppError } from './src/AppError';
 import strings from './src/strings';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
@@ -26,6 +28,11 @@ import { setToolDir, ensureTools } from './src/tools';
 import { Server, get as httpGet } from 'http';
 import * as os from 'os';
 import { Buffer } from 'buffer';
+
+interface TransferState extends TransferInfo {
+  token: string;
+  server: Server;
+}
 
 interface DownloadItem {
   id: string;
@@ -36,13 +43,7 @@ interface DownloadItem {
   error: string | null;
   outputPath: string | null;
   tempPath?: string;
-  transfer: {
-    url: string;
-    token: string;
-    qr: string;
-    expiresAt: number;
-    server: Server;
-  } | null;
+  transfer: TransferState | null;
   transferTimer: NodeJS.Timeout | null;
 }
 
@@ -50,16 +51,19 @@ interface DownloadItem {
 process.on('uncaughtException', (err) => {
   logging.error('Uncaught Exception', err);
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('app-crash', {
+    const crashInfo: CrashInfo = {
       message: err.message,
       stack: err.stack
-    });
+    };
+    mainWindow.webContents.send('app-crash', crashInfo);
   }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logging.error('Unhandled Rejection at:', promise);
-  logging.error('Reason:', reason);
+  const promiseStr = `Unhandled Rejection at: ${promise}`;
+  logging.error(promiseStr);
+  const reasonStr = `Reason: ${reason}`;
+  logging.error(reasonStr);
 });
 
 const queue = new TaskQueue();
@@ -116,9 +120,9 @@ async function runSmokeTest(): Promise<void> {
       logging.info(msg);
       process.stdout.write(`[SMOKE-INFO] ${msg}\n`);
     };
-    const logError = (msg: string, err?: unknown) => {
-      logging.error(msg, err);
-      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? JSON.stringify(err) : ''}\n`);
+    const logError = (msg: string, err?: Error | string) => {
+      logging.error(msg, err || null);
+      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? String(err) : ''}\n`);
     };
 
     logInfo('Smoke test starting');
@@ -138,12 +142,12 @@ async function runSmokeTest(): Promise<void> {
     closeTransferServer(server);
     fs.unlinkSync(tempFilePath);
     app.exit(0);
-  } catch (error: unknown) {
-    const logError = (msg: string, err?: unknown) => {
+    } catch (error) {
+    const logError = (msg: string, err?: Error) => {
       logging.error(msg, err);
-      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? JSON.stringify(err) : ''}\n`);
+      process.stderr.write(`[SMOKE-ERROR] ${msg} ${err ? String(err) : ''}\n`);
     };
-    logError('Smoke test failed', error);
+    logError('Smoke test failed', error instanceof Error ? error : new Error(String(error)));
     if (server) {
       closeTransferServer(server);
     }
@@ -159,7 +163,7 @@ function sendUpdate(id: string): void {
   const item = downloads.get(id);
   if (!item) return;
 
-  const updateData = {
+  const updateData: DownloadUpdate = {
     id: item.id,
     url: item.url,
     title: item.title,
@@ -171,7 +175,8 @@ function sendUpdate(id: string): void {
       url: item.transfer.url,
       qr: item.transfer.qr,
       expiresAt: item.transfer.expiresAt
-    } : null
+    } : null,
+    refreshStorage: item.status === strings.status.ready || item.status === strings.status.readyToSend
   };
 
   mainWindow.webContents.send('download-update', updateData);
@@ -242,12 +247,19 @@ function runPipeline(item: DownloadItem): void {
       item.progress = 100;
       item.error = null;
       sendUpdate(item.id);
-    } catch (error: unknown) {
-      logging.error('[Pipeline] Global failure', error);
+    } catch (error) {
+      logging.error('[Pipeline] Global failure', error instanceof Error ? error : new Error(String(error)));
       
       let errorMsg = strings.errors.downloadFailed;
-      const errorTyped = error as { type?: string; message?: string; stderr?: string };
-      const errorType = errorTyped.type || errorTyped.message || 'UNKNOWN';
+      let errorType: string | undefined;
+      let errorStderr: string | undefined;
+
+      if (error instanceof AppError) {
+        errorType = error.type;
+        errorStderr = error.stderr;
+      } else if (error instanceof Error) {
+        errorType = error.message;
+      }
 
       if (errorType === 'INFO_ERROR' || errorType === 'INFO_PARSE_ERROR') {
         errorMsg = strings.errors.infoError;
@@ -269,15 +281,15 @@ function runPipeline(item: DownloadItem): void {
         errorMsg = strings.errors.stalledError;
       }
       
-      if (errorTyped.stderr) {
-        logging.error(`[Pipeline] Captured stderr: ${errorTyped.stderr}`);
-        if (errorTyped.stderr.includes('Sign in to confirm you’re not a bot')) {
+      if (errorStderr) {
+        logging.error(`[Pipeline] Captured stderr: ${errorStderr}`);
+        if (errorStderr.includes('Sign in to confirm you’re not a bot')) {
           errorMsg = 'YouTube prašo patvirtinti, kad nesate robotas.';
-        } else if (errorTyped.stderr.includes('This video is age-restricted')) {
+        } else if (errorStderr.includes('This video is age-restricted')) {
           errorMsg = 'Vaizdo įrašas turi amžiaus ribojimą.';
-        } else if (errorTyped.stderr.includes('Video unavailable')) {
+        } else if (errorStderr.includes('Video unavailable')) {
           errorMsg = 'Vaizdo įrašas nepasiekiamas.';
-        } else if (errorTyped.stderr.includes('GVS PO Token')) {
+        } else if (errorStderr.includes('GVS PO Token')) {
           errorMsg = 'YouTube reikalauja papildomo patvirtinimo (PO Token). Bandykite vėliau arba atnaujinkite nustatymus.';
         }
       }
@@ -365,24 +377,24 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.on('app-log', (_event, { level, message, err }) => {
-  switch (level) {
+ipcMain.on('app-log', (_event, payload: AppLogPayload) => {
+  switch (payload.level) {
     case 'info':
-      logging.info(message);
+      logging.info(payload.message);
       break;
     case 'warn':
-      logging.warn(message);
+      logging.warn(payload.message);
       break;
     case 'error':
-      logging.error(message, err);
+      logging.error(payload.message, payload.err ?? null);
       break;
     case 'debug':
-      logging.debug(message);
+      logging.debug(payload.message);
       break;
   }
 });
 
-ipcMain.handle('download-start', async (_event, url: string) => {
+ipcMain.handle('download-start', async (_event, url: string): Promise<DownloadStartResult> => {
   const id = `dl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   if (!extractVideoId(url)) {
@@ -408,7 +420,7 @@ ipcMain.handle('download-start', async (_event, url: string) => {
   return { id };
 });
 
-ipcMain.handle('download-retry', async (_event, id: string) => {
+ipcMain.handle('download-retry', async (_event, id: string): Promise<Pick<DownloadStartResult, 'id'> | undefined> => {
   const item = downloads.get(id);
   if (!item) return;
   item.error = null;
@@ -423,7 +435,7 @@ ipcMain.handle('app-version', () => {
   return app.getVersion();
 });
 
-ipcMain.handle('transfer-start', async (_event, id: string) => {
+ipcMain.handle('transfer-start', async (_event, id: string): Promise<TransferStartResult> => {
   const item = downloads.get(id);
   if (!item) {
     logging.error(`transfer-start: item ${id} not found`);
@@ -474,9 +486,9 @@ ipcMain.handle('transfer-start', async (_event, id: string) => {
     }, ttl);
     sendUpdate(id);
 
-    return { id, transfer: { url, qr } };
-  } catch (error: unknown) {
-    const err = error as Error;
+    return { id, transfer: { url, qr, expiresAt: transfer.expiresAt } };
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
     logging.error(`transfer server start failed: ${err.message}`, err);
     item.error = `Siuntimas nepavyko: ${err.message}`;
     sendUpdate(id);
@@ -511,7 +523,7 @@ ipcMain.handle('storage-delete-file', (_event, filePath: string) => {
   return deleteFile(filePath);
 });
 
-ipcMain.handle('transfer-start-by-path', async (_event, filePath: string) => {
+ipcMain.handle('transfer-start-by-path', async (_event, filePath: string): Promise<TransferStartResult> => {
   logging.info(`transfer-start-by-path requested for: ${filePath}`);
   const id = `storage-transfer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -561,8 +573,8 @@ ipcMain.handle('transfer-start-by-path', async (_event, filePath: string) => {
 
     logging.info(`transfer-start-by-path successful for ${filePath}. ID: ${id}. Expires at ${new Date(transfer.expiresAt).toISOString()}`);
     return { id, transfer: { url, qr, expiresAt: transfer.expiresAt } };
-  } catch (error: unknown) {
-    const err = error as Error;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
     logging.error(`transfer server start failed for ${filePath}: ${err.message}`, err);
     return { error: `Siuntimas nepavyko: ${err.message}` };
   }

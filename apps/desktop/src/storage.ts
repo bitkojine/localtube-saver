@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import sanitize from 'sanitize-filename';
 import { OUTPUT_DIR, MAX_FILENAME_LENGTH } from './config';
+import * as logging from './logging';
+import type { FileInfo } from './types';
 
 const CACHE_FILE = path.join(OUTPUT_DIR, '.cache.json');
 
@@ -14,10 +16,21 @@ export function ensureOutputDir(): void {
 function loadCache(): Cache {
   try {
     if (fs.existsSync(CACHE_FILE)) {
-      return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        logging.debug(`[Storage] Invalid cache format, resetting`);
+        return {};
+      }
+      const cache: Cache = {};
+      for (const key of Object.keys(raw)) {
+        if (typeof raw[key] === 'string') {
+          cache[key] = raw[key];
+        }
+      }
+      return cache;
     }
   } catch (_error) {
-    
+    logging.debug(`[Storage] Failed to load cache from ${CACHE_FILE}`);
   }
   return {};
 }
@@ -27,7 +40,7 @@ function saveCache(cache: Cache): void {
     ensureOutputDir();
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
   } catch (_error) {
-    
+    logging.debug(`[Storage] Failed to save cache to ${CACHE_FILE}`);
   }
 }
 
@@ -86,13 +99,6 @@ export function hasEnoughDiskSpace(targetDir: string, requiredBytes: number): bo
   }
 }
 
-export interface FileInfo {
-  name: string;
-  path: string;
-  size: number;
-  createdAt: number;
-}
-
 export function getFilesInfo(): FileInfo[] {
   ensureOutputDir();
   try {
@@ -122,7 +128,7 @@ export function deleteFile(filePath: string): boolean {
       return true;
     }
   } catch (_error) {
-    
+    logging.debug(`[Storage] Failed to delete file: ${filePath}`);
   }
   return false;
 }

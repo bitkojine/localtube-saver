@@ -2,15 +2,13 @@ import { MAX_CONCURRENT_DOWNLOADS } from './config';
 
 type Task<T> = () => Promise<T> | T;
 
-interface QueueItem<T> {
-  task: Task<T>;
-  resolve: (value: T | PromiseLike<T>) => void;
-  reject: (reason?: unknown) => void;
+interface InternalQueueItem {
+  run: () => void;
 }
 
 export class TaskQueue {
   private concurrency: number;
-  private queue: QueueItem<unknown>[] = [];
+  private queue: InternalQueueItem[] = [];
   private activeCount: number = 0;
 
   constructor(concurrency: number = MAX_CONCURRENT_DOWNLOADS) {
@@ -19,7 +17,19 @@ export class TaskQueue {
 
   add<T>(task: Task<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.queue.push({ task, resolve, reject } as QueueItem<unknown>);
+      const wrappedReject = (reason: Error) => reject(reason);
+      this.queue.push({
+        run: () => {
+          Promise.resolve()
+            .then(task)
+            .then((result) => resolve(result))
+            .catch((error) => wrappedReject(error instanceof Error ? error : new Error(String(error))))
+            .finally(() => {
+              this.activeCount -= 1;
+              this.next();
+            });
+        }
+      });
       this.next();
     });
   }
@@ -35,13 +45,6 @@ export class TaskQueue {
     }
 
     this.activeCount += 1;
-    Promise.resolve()
-      .then(item.task)
-      .then((result) => item.resolve(result))
-      .catch((error) => item.reject(error))
-      .finally(() => {
-        this.activeCount -= 1;
-        this.next();
-      });
+    item.run();
   }
 }

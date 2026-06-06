@@ -3,10 +3,10 @@ import * as path from 'path';
 import { LOG_DIR } from './config';
 
 enum LogLevel {
-  DEBUG = 'DEBUG',
-  INFO = 'INFO',
-  WARN = 'WARN',
-  ERROR = 'ERROR'
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARN = 'warn',
+  ERROR = 'error'
 }
 
 function ensureLogDir(): void {
@@ -30,9 +30,8 @@ function write(level: LogLevel, message: string): void {
     ensureLogDir();
     const entry = formatLog(level, message);
     fs.appendFileSync(logFilePath(), entry);
-  } catch (error) {
-    
-    console.error('Logging failed:', error);
+  } catch (logError) {
+    process.stderr.write(`[Logging] Failed to write log: ${String(logError)}\n`);
   }
 }
 
@@ -44,11 +43,10 @@ export function warn(message: string): void {
   write(LogLevel.WARN, message);
 }
 
-export function error(message: string, err: unknown = null): void {
+export function error(message: string, err: Error | string | null = null): void {
   let msg = message;
   if (err) {
-    const errorTyped = err as { message?: string; type?: string; stack?: string };
-    const errMsg = err instanceof Error ? err.message : (errorTyped.message || errorTyped.type || (typeof err === 'object' ? JSON.stringify(err) : String(err)));
+    const errMsg = typeof err === 'string' ? err : err.message;
     msg += ` | Error: ${errMsg}`;
     if (err instanceof Error && err.stack) {
       msg += `\nStack trace:\n${err.stack}`;
@@ -75,7 +73,7 @@ export function cleanupOldLogs(): void {
       }
     }
   } catch (_error) {
-    
+    process.stderr.write('[Logging] Failed to clean up old logs\n');
   }
 }
 

@@ -2,10 +2,41 @@ import { spawn } from 'child_process';
 import { FFPROBE_TIMEOUT_MS, TRANSCODE_NO_PROGRESS_TIMEOUT_MS, TRANSCODE_TOTAL_TIMEOUT_MS } from './config';
 import { info as writeLog, debug, error as writeError } from './logging';
 import { getFfmpegPath, getFfprobePath } from './tools';
+import { FfprobeOutput } from './types';
+import { AppError } from './AppError';
 
 interface ProbeResult {
   duration: number;
   audioBitrate: number;
+}
+
+function parseFfprobeOutput(stdout: string): ProbeResult {
+  try {
+    const parsed = JSON.parse(stdout);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('PROBE_PARSE_FAILED');
+    }
+    const obj = parsed as FfprobeOutput;
+
+    let audioBitrate = 0;
+    if (Array.isArray(obj.streams)) {
+      for (const stream of obj.streams) {
+        if (stream?.codec_type === 'audio' && typeof stream.bit_rate === 'string') {
+          audioBitrate = Number(stream.bit_rate) || 0;
+          break;
+        }
+      }
+    }
+
+    const duration = typeof obj.format?.duration === 'string' ? Number(obj.format.duration) || 0 : 0;
+
+    return {
+      duration,
+      audioBitrate
+    };
+  } catch {
+    throw new Error('PROBE_PARSE_FAILED');
+  }
 }
 
 export function runFfprobe(filePath: string): Promise<ProbeResult> {
@@ -42,12 +73,9 @@ export function runFfprobe(filePath: string): Promise<ProbeResult> {
       }
 
       try {
-        const parsed = JSON.parse(stdout) as { format?: { duration?: string }; streams?: { codec_type?: string; bit_rate?: string }[] };
-        const duration = Number(parsed.format?.duration || 0);
-        const audioStream = (parsed.streams || []).find((s) => s.codec_type === 'audio');
-        const audioBitrate = Number(audioStream?.bit_rate || 0);
-        resolve({ duration, audioBitrate });
+        resolve(parseFfprobeOutput(stdout));
       } catch (_error) {
+        writeLog(`ffprobe parse failed for stdout: ${stdout.slice(0, 200)}`);
         reject(new Error('PROBE_PARSE_FAILED'));
       }
     });
@@ -115,13 +143,13 @@ function spawnTranscode(inputPath: string, outputPath: string, audioBitrate: num
 
       if (killedByTotalTimeout) {
         writeError(`ffmpeg timed out after ${TRANSCODE_TOTAL_TIMEOUT_MS}ms`);
-        reject(new Error('TRANSCODE_TIMEOUT'));
+        reject(new AppError('TRANSCODE_TIMEOUT'));
         return;
       }
 
       if (killedByStallWatchdog) {
         writeError(`ffmpeg stalled (no progress for ${TRANSCODE_NO_PROGRESS_TIMEOUT_MS}ms)`);
-        reject(new Error('TRANSCODE_STALLED'));
+        reject(new AppError('TRANSCODE_STALLED'));
         return;
       }
 

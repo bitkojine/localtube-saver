@@ -6,7 +6,7 @@ import { TRANSFER_BIND_HOST, TRANSFER_TOKEN_TTL_MS, TRANSFER_NO_DATA_TIMEOUT_MS,
 import { info as writeLog } from './logging';
 import { Server } from 'http';
 
-export interface TransferInfo {
+export interface TransferServerInfo {
   server: Server;
   token: string;
   port: number;
@@ -17,7 +17,7 @@ function createToken(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-export async function createTransferServer(filePath: string, bindHost = TRANSFER_BIND_HOST): Promise<TransferInfo> {
+export async function createTransferServer(filePath: string, bindHost = TRANSFER_BIND_HOST): Promise<TransferServerInfo> {
   const stats = fs.statSync(filePath);
   if (stats.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('FILE_TOO_LARGE');

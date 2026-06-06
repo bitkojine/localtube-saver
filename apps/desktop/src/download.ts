@@ -16,6 +16,8 @@ import {
 } from './config';
 import * as logging from './logging';
 import { getYtDlpPath, getFfmpegPath } from './tools';
+import { AppErrorType, YtDlpInfo } from './types';
+import { AppError } from './AppError';
 
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
@@ -85,35 +87,47 @@ export function getVideoInfo(url: string): Promise<VideoInfo> {
     proc.on('close', (code) => {
       clearTimeout(timeout);
       if (code !== 0) {
-        logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, { stderr });
-        reject({ type: 'INFO_ERROR', code, stderr });
+        const infoError = new AppError('INFO_ERROR', { stderr, code: code ?? undefined });
+        logging.error(`[Pipeline] yt-dlp info failed (code ${code})`, infoError);
+        reject(infoError);
         return;
       }
 
       try {
         const lastLine = stdout.trim().split('\n').pop();
         if (!lastLine) throw new Error('EMPTY_OUTPUT');
-        const info = JSON.parse(lastLine);
-        
-        const size = Number(info.filesize_approx || info.filesize || 0);
-        const audioBitrate = Number(info.abr || info.tbr || 0);
+        const parsed = JSON.parse(lastLine);
+        if (typeof parsed !== 'object' || parsed === null) {
+          throw new Error('INVALID_JSON_STRUCTURE');
+        }
+        const info = parsed as YtDlpInfo;
 
-        logging.info(`[Pipeline] Video info retrieved: "${info.title}" (${size} bytes)`);
+        const title = typeof info.title === 'string' && info.title.length > 0 ? info.title : 'video';
+        const filesize = typeof info.filesize === 'number' ? info.filesize : 0;
+        const filesizeApprox = typeof info.filesize_approx === 'number' ? info.filesize_approx : 0;
+        const abr = typeof info.abr === 'number' ? info.abr : 0;
+        const tbr = typeof info.tbr === 'number' ? info.tbr : 0;
+
+        const size = Number(filesizeApprox || filesize || 0);
+        const audioBitrate = Number(abr || tbr || 0);
+
+        logging.info(`[Pipeline] Video info retrieved: "${title}" (${size} bytes)`);
 
         resolve({
-          title: info.title || 'video',
+          title,
           sizeBytes: Number.isFinite(size) ? size : 0,
           audioBitrate
         });
       } catch (_err) {
-        logging.error(`[Pipeline] Failed to parse yt-dlp JSON output`, { stdout, stderr });
-        reject({ type: 'INFO_PARSE_ERROR', stderr, stdout });
+        const parseError = new AppError('INFO_PARSE_ERROR', { stderr, stdout });
+        logging.error(`[Pipeline] Failed to parse yt-dlp JSON output`, parseError);
+        reject(parseError);
       }
     });
   });
 }
 
-function classifyError(stderrText: string): string {
+function classifyError(stderrText: string): AppErrorType {
   const text = stderrText.toLowerCase();
   if (text.includes('requested format is not available') || text.includes('format not available')) {
     return 'FORMAT_ERROR';
@@ -195,14 +209,16 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       clearTimeout(totalTimeout);
 
       if (killedByTotalTimeout) {
-        logging.error(`yt-dlp download timed out after ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms`);
-        reject({ type: 'TIMEOUT', stderr, tempPath });
+        const timeoutError = new AppError('TIMEOUT', { stderr, tempPath });
+        logging.error(`yt-dlp download timed out after ${DOWNLOAD_TOTAL_TIMEOUT_MS}ms`, timeoutError);
+        reject(timeoutError);
         return;
       }
 
       if (killedByWatchdog) {
-        logging.error(`yt-dlp download stalled (no progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms)`);
-        reject({ type: 'STALLED', stderr, tempPath });
+        const stallError = new AppError('STALLED', { stderr, tempPath });
+        logging.error(`yt-dlp download stalled (no progress for ${DOWNLOAD_NO_PROGRESS_TIMEOUT_MS}ms)`, stallError);
+        reject(stallError);
         return;
       }
 
@@ -210,11 +226,9 @@ function spawnDownload(url: string, format: string, tempPath: string, onProgress
       if (code === 0) {
         resolve();
       } else {
-        logging.error(`yt-dlp error: ${stderr.trim()}`);
-        reject({
-          type: classifyError(stderr),
-          stderr
-        });
+        const downloadError = new AppError(classifyError(stderr), { stderr });
+        logging.error(`yt-dlp error: ${stderr.trim()}`, downloadError);
+        reject(downloadError);
       }
     });
   });
@@ -224,7 +238,7 @@ export async function downloadVideo(url: string, onProgress: (percent: number) =
   logging.info(`Starting download for URL: ${url}`);
   const info = existingInfo || await getVideoInfo(url);
   if (info.sizeBytes > MAX_FILE_SIZE_BYTES) {
-    throw new Error('FILE_TOO_LARGE');
+    throw new AppError('FILE_TOO_LARGE');
   }
 
   const safeName = `localtube-${Date.now()}.mp4`;
@@ -235,9 +249,8 @@ export async function downloadVideo(url: string, onProgress: (percent: number) =
     try {
       await spawnDownload(url, DOWNLOAD_FORMAT_PRIMARY, tempPath, onProgress);
       return { info, tempPath };
-    } catch (error: unknown) {
-      const err = error as { type?: string };
-      if (err.type === 'FORMAT_ERROR') {
+    } catch (error) {
+      if (error instanceof AppError && error.type === 'FORMAT_ERROR') {
         try {
           await spawnDownload(url, DOWNLOAD_FORMAT_FALLBACK, tempPath, onProgress);
           return { info, tempPath };
@@ -256,7 +269,7 @@ export async function downloadVideo(url: string, onProgress: (percent: number) =
     }
   }
 
-  throw new Error('DOWNLOAD_FAILED');
+  throw new AppError('DOWNLOAD_FAILED');
 }
 
 export function cleanupTempFiles(): void {
@@ -268,11 +281,11 @@ export function cleanupTempFiles(): void {
         try {
           fs.unlinkSync(fullPath);
         } catch (_error) {
-          
+          logging.debug(`[Cleanup] Failed to delete temp file: ${fullPath}`);
         }
       }
     }
   } catch (_error) {
-    
+    logging.debug(`[Cleanup] Failed to read TEMP_DIR: ${TEMP_DIR}`);
   }
 }
